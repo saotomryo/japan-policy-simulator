@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "guardrail-result.schema.json",
+  "title": "GuardrailResult",
+  "type": "object",
+  "required": ["status", "summary", "reasons", "requiredRevisions"],
+  "properties": {
+    "status": { "type": "string", "enum": ["approved", "needs_revision", "rejected"] },
+    "summary": { "type": "string" },
+    "reasons": { "type": "array", "items": { "type": "string" } },
+    "requiredRevisions": { "type": "array", "items": { "type": "string" } },
+    "alternativePolicyIdeas": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": false
+}

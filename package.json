@@ -1,0 +1,13 @@
+{
+  "name": "national-policy-simulator",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "python3 -m http.server 4173",
+    "codex:app-server": "codex app-server --listen ws://127.0.0.1:45123",
+    "codex:ai-bridge": "node tools/codex-ai-bridge.mjs",
+    "check": "node --check src/app.js"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "opinion.schema.json",
+  "title": "Opinion",
+  "type": "object",
+  "required": ["id", "speakerName", "groupId", "mood", "text", "relatedMetricIds"],
+  "properties": {
+    "id": { "type": "string" },
+    "speakerName": { "type": "string" },
+    "groupId": { "type": "string" },
+    "mood": { "type": "string", "enum": ["要望", "懸念", "少数意見", "賛成", "反対", "提案"] },
+    "text": { "type": "string" },
+    "relatedMetricIds": { "type": "array", "items": { "type": "string" } },
+    "intensity": { "type": "number", "minimum": 0, "maximum": 1 }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,206 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "save-file.schema.json",
+  "title": "SaveFile",
+  "type": "object",
+  "required": ["schemaVersion", "app", "currentState", "timeline", "eventLog", "groupMemory", "memorySummary"],
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1.0.0" },
+    "app": {
+      "type": "object",
+      "required": ["scenarioId", "exportedAt"],
+      "properties": {
+        "scenarioId": { "type": "string" },
+        "exportedAt": { "type": "string" },
+        "appVersion": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "currentState": {
+      "type": "object",
+      "required": ["year", "term", "seed", "visibleMetrics", "hiddenScores", "finance", "selectedIssueId"],
+      "properties": {
+        "year": { "type": "integer", "minimum": 1 },
+        "term": { "type": "integer", "minimum": 1 },
+        "seed": { "type": "string" },
+        "visibleMetrics": { "type": "object", "additionalProperties": { "type": "number" } },
+        "hiddenScores": { "type": "object", "additionalProperties": { "type": "number" } },
+        "finance": {
+          "type": "object",
+          "required": ["budget", "cash"],
+          "properties": {
+            "budget": { "type": "number" },
+            "cash": { "type": "number" }
+          },
+          "additionalProperties": false
+        },
+        "seasonalEvents": {
+          "type": "array",
+          "items": { "type": "object", "additionalProperties": true }
+        },
+        "voices": {
+          "type": "array",
+          "items": { "type": "object", "additionalProperties": true }
+        },
+        "voiceAnalysis": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "issues": {
+          "type": "array",
+          "items": { "type": "object", "additionalProperties": true }
+        },
+        "selectedIssueId": { "type": ["string", "null"] },
+        "issueSelectionChat": {
+          "type": "object",
+          "required": ["title", "selectedIssueId", "messages"],
+          "properties": {
+            "title": { "type": "string" },
+            "selectedIssueId": { "type": ["string", "null"] },
+            "messages": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["role", "text"],
+                "properties": {
+                  "role": { "type": "string" },
+                  "text": { "type": "string" }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "policyDraft": {
+          "type": ["object", "null"],
+          "additionalProperties": true
+        },
+        "policyChat": {
+          "type": "object",
+          "required": ["messages"],
+          "properties": {
+            "messages": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["role", "text"],
+                "properties": {
+                  "role": { "type": "string" },
+                  "text": { "type": "string" }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "activePolicyDraftId": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "timeline": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["turnId", "label", "startSnapshot", "endSnapshot", "metricDeltas", "financeDelta", "groupDeltas", "summary"],
+        "properties": {
+          "turnId": { "type": "string" },
+          "label": { "type": "string" },
+          "startSnapshot": { "type": "object", "additionalProperties": true },
+          "endSnapshot": { "type": "object", "additionalProperties": true },
+          "metricDeltas": { "type": "object", "additionalProperties": { "type": "number" } },
+          "hiddenScoreDeltas": { "type": "object", "additionalProperties": { "type": "number" } },
+          "financeDelta": {
+            "type": "object",
+            "required": ["budget", "cash"],
+            "properties": {
+              "budget": { "type": "number" },
+              "cash": { "type": "number" }
+            },
+            "additionalProperties": false
+          },
+          "groupDeltas": { "type": "object", "additionalProperties": { "type": "number" } },
+          "policyId": { "type": ["string", "null"] },
+          "summary": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "eventLog": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "turnId", "type", "createdAt", "summary", "payload"],
+        "properties": {
+          "id": { "type": "string" },
+          "turnId": { "type": "string" },
+          "type": {
+            "type": "string",
+            "enum": [
+              "opinion_generated",
+              "issue_extracted",
+              "issue_chat",
+              "analysis_generated",
+              "policy_draft_updated",
+              "guardrail_evaluated",
+              "policy_adopted",
+              "policy_simulated",
+              "random_event",
+              "annual_report_generated"
+            ]
+          },
+          "createdAt": { "type": "string" },
+          "summary": { "type": "string" },
+          "payload": { "type": "object", "additionalProperties": true }
+        },
+        "additionalProperties": false
+      }
+    },
+    "groupMemory": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["groupId", "support", "frustration", "trust", "voiceActivity", "concerns", "lastChangeReason"],
+        "properties": {
+          "groupId": { "type": "string" },
+          "support": { "type": "number" },
+          "frustration": { "type": "number" },
+          "trust": { "type": "number" },
+          "voiceActivity": { "type": "number" },
+          "concerns": { "type": "array", "items": { "type": "string" } },
+          "lastChangeReason": { "type": "string" },
+          "relatedEventIds": { "type": "array", "items": { "type": "string" } }
+        },
+        "additionalProperties": false
+      }
+    },
+    "memorySummary": {
+      "type": "object",
+      "required": ["operationPattern", "successfulPolicies", "remainingSideEffects", "groupRisks", "nextTurnConsiderations"],
+      "properties": {
+        "operationPattern": { "type": "string" },
+        "successfulPolicies": { "type": "array", "items": { "type": "string" } },
+        "remainingSideEffects": { "type": "array", "items": { "type": "string" } },
+        "groupRisks": { "type": "array", "items": { "type": "string" } },
+        "nextTurnConsiderations": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "annualReport": {
+      "type": ["object", "null"],
+      "properties": {
+        "title": { "type": "string" },
+        "grade": { "type": "string" },
+        "summary": { "type": "string" },
+        "adoptedPolicies": { "type": "array", "items": { "type": "string" } },
+        "visibleHighlights": { "type": "array", "items": { "type": "string" } },
+        "hiddenFindings": { "type": "array", "items": { "type": "string" } },
+        "minorityImpact": { "type": "string" },
+        "nextYearIssues": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "turn-start-generation.schema.json",
+  "title": "TurnStartGeneration",
+  "type": "object",
+  "required": ["voices", "voiceAnalysis", "issues", "assistantMessage"],
+  "properties": {
+    "voices": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "group", "mood", "text", "avatar"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "group": { "type": "string" },
+          "mood": { "type": "string" },
+          "text": { "type": "string" },
+          "avatar": {
+            "type": "object",
+            "required": ["slot", "label"],
+            "properties": {
+              "slot": { "type": "string" },
+              "label": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "voiceAnalysis": {
+      "type": "object",
+      "required": ["populationSize", "sampledOpinionCount", "embeddingModel", "clusters", "distances", "hierarchy"],
+      "properties": {
+        "populationSize": { "type": "number" },
+        "sampledOpinionCount": { "type": "number" },
+        "embeddingModel": { "type": "string" },
+        "clusters": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "label", "size", "sentiment", "x", "y", "keywords", "summary", "representativeVoiceIds"],
+            "properties": {
+              "id": { "type": "string" },
+              "label": { "type": "string" },
+              "size": { "type": "number" },
+              "sentiment": { "type": "number" },
+              "x": { "type": "number" },
+              "y": { "type": "number" },
+              "keywords": { "type": "array", "items": { "type": "string" } },
+              "summary": { "type": "string" },
+              "representativeVoiceIds": { "type": "array", "items": { "type": "string" } }
+            },
+            "additionalProperties": false
+          }
+        },
+        "distances": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["from", "to", "distance", "label"],
+            "properties": {
+              "from": { "type": "string" },
+              "to": { "type": "string" },
+              "distance": { "type": "number" },
+              "label": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "hierarchy": {
+          "type": "object",
+          "required": ["label", "size", "children"],
+          "properties": {
+            "label": { "type": "string" },
+            "size": { "type": "number" },
+            "children": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["label", "size", "clusterId", "children"],
+                "properties": {
+                  "label": { "type": "string" },
+                  "size": { "type": "number" },
+                  "clusterId": { "type": ["string", "null"] },
+                  "children": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": ["label", "size", "clusterId", "children"],
+                      "properties": {
+                        "label": { "type": "string" },
+                        "size": { "type": "number" },
+                        "clusterId": { "type": ["string", "null"] },
+                        "children": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": ["label", "size", "clusterId"],
+                            "properties": {
+                              "label": { "type": "string" },
+                              "size": { "type": "number" },
+                              "clusterId": { "type": ["string", "null"] }
+                            },
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "issues": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "fit", "metrics", "summary"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "fit": { "type": "number", "minimum": 0, "maximum": 100 },
+          "metrics": { "type": "array", "items": { "type": "string" } },
+          "summary": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "assistantMessage": { "type": "string" }
+  },
+  "additionalProperties": false
+}

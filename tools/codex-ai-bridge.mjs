@@ -1,0 +1,221 @@
+import http from "node:http";
+
+const bridgePort = Number(process.env.CODEX_AI_BRIDGE_PORT || 45124);
+const codexUrl = process.env.CODEX_APP_SERVER_URL || "ws://127.0.0.1:45123";
+
+function sendJson(response, status, body) {
+  response.writeHead(status, {
+    "Access-Control-Allow-Origin": "http://127.0.0.1:4173",
+    "Access-Control-Allow-Methods": "POST, OPTIONS, GET",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Content-Type": "application/json; charset=utf-8",
+  });
+  response.end(JSON.stringify(body));
+}
+
+function readBody(request) {
+  return new Promise((resolve, reject) => {
+    let body = "";
+    request.setEncoding("utf8");
+    request.on("data", (chunk) => {
+      body += chunk;
+      if (body.length > 2_000_000) {
+        reject(new Error("Request body too large"));
+        request.destroy();
+      }
+    });
+    request.on("end", () => resolve(body));
+    request.on("error", reject);
+  });
+}
+
+function parseJsonFromText(text) {
+  const trimmed = text.trim();
+  if (trimmed.startsWith("{")) return JSON.parse(trimmed);
+  const match = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (match) return JSON.parse(match[1]);
+  throw new Error(`Codex response did not contain JSON: ${trimmed.slice(0, 240) || "(empty)"}`);
+}
+
+function extractAgentText(turn, streamedText) {
+  const messages = turn?.items
+    ?.filter((item) => item.type === "agentMessage" && typeof item.text === "string")
+    .map((item) => item.text.trim())
+    .filter(Boolean);
+  return messages?.length ? messages.at(-1) : streamedText.trim();
+}
+
+function extractRawResponseText(rawItems) {
+  const texts = [];
+  for (const item of rawItems) {
+    if (item?.type !== "message") continue;
+    for (const content of item.content || []) {
+      if (content.type === "output_text" && typeof content.text === "string") {
+        texts.push(content.text.trim());
+      }
+    }
+  }
+  return texts.filter(Boolean).at(-1) || "";
+}
+
+function normalizeSchemaForCodex(value) {
+  if (Array.isArray(value)) return value.map(normalizeSchemaForCodex);
+  if (!value || typeof value !== "object") return value;
+  const next = Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => key !== "$schema" && key !== "$id")
+      .map(([key, child]) => [key, normalizeSchemaForCodex(child)]),
+  );
+  if (next.type === "object" && next.properties && typeof next.properties === "object") {
+    next.required = Object.keys(next.properties);
+    next.additionalProperties = false;
+  }
+  return next;
+}
+
+function codexRequest({ schemaName, prompt, schema, model }) {
+  const codexSchema = normalizeSchemaForCodex(schema);
+  const jsonPrompt = [
+    "あなたは学園自治シミュレーターの熟議支援AIです。",
+    "次の入力を読み、指定されたJSON Schemaに従うJSONだけを返してください。",
+    "Markdown、説明文、コードフェンスは不要です。",
+    "",
+    `Schema name: ${schemaName}`,
+    JSON.stringify({ schema: codexSchema, input: JSON.parse(prompt) }, null, 2),
+  ].join("\n");
+
+  return new Promise((resolve, reject) => {
+    const socket = new WebSocket(codexUrl);
+    const pending = new Map();
+    let nextId = 1;
+    let streamedText = "";
+    let activeThreadId = null;
+    let waitForTurnCompleted = null;
+    const completedItems = [];
+    const rawItems = [];
+    const timeout = setTimeout(() => {
+      socket.close();
+      reject(new Error("Codex app server request timed out"));
+    }, 120000);
+
+    function cleanup() {
+      clearTimeout(timeout);
+      pending.clear();
+      if (socket.readyState === WebSocket.OPEN) socket.close();
+    }
+
+    function request(method, params) {
+      const id = nextId;
+      nextId += 1;
+      socket.send(JSON.stringify({ id, method, params }));
+      return new Promise((requestResolve, requestReject) => {
+        pending.set(id, { resolve: requestResolve, reject: requestReject });
+      });
+    }
+
+    socket.addEventListener("error", () => {
+      cleanup();
+      reject(new Error(`Codex app server is not reachable: ${codexUrl}`));
+    });
+
+    socket.addEventListener("message", (event) => {
+      const message = JSON.parse(event.data);
+      if (message.method === "item/agentMessage/delta") {
+        streamedText += message.params?.delta || "";
+        return;
+      }
+      if (message.method === "turn/completed" && message.params?.threadId === activeThreadId && waitForTurnCompleted) {
+        waitForTurnCompleted(message.params.turn);
+        waitForTurnCompleted = null;
+        return;
+      }
+      if (message.method === "item/completed" && message.params?.threadId === activeThreadId) {
+        completedItems.push(message.params.item);
+        return;
+      }
+      if (message.method === "rawResponseItem/completed" && message.params?.threadId === activeThreadId) {
+        rawItems.push(message.params.item);
+        return;
+      }
+      if (!message.id || !pending.has(message.id)) return;
+      const handlers = pending.get(message.id);
+      pending.delete(message.id);
+      if (message.error) {
+        handlers.reject(new Error(message.error.message || "Codex app server request failed"));
+      } else {
+        handlers.resolve(message.result);
+      }
+    });
+
+    socket.addEventListener("open", async () => {
+      try {
+        await request("initialize", {
+          clientInfo: { name: "school-democracy-simulator", version: "0.1.0" },
+          capabilities: { experimentalApi: true },
+        });
+        const threadStart = await request("thread/start", {
+          model: model || null,
+          cwd: null,
+          approvalPolicy: "never",
+          sandbox: "read-only",
+          ephemeral: true,
+          experimentalRawEvents: true,
+          persistExtendedHistory: false,
+        });
+        activeThreadId = threadStart.thread.id;
+        const turnStart = await request("turn/start", {
+          threadId: activeThreadId,
+          input: [{ type: "text", text: jsonPrompt, text_elements: [] }],
+          outputSchema: codexSchema,
+          approvalPolicy: "never",
+        });
+        const completedTurn =
+          turnStart.turn?.status === "completed"
+            ? turnStart.turn
+            : await new Promise((turnResolve) => {
+                waitForTurnCompleted = turnResolve;
+              });
+        const rawText =
+          extractAgentText({ ...completedTurn, items: completedItems.length ? completedItems : completedTurn.items }, streamedText) ||
+          extractRawResponseText(rawItems);
+        if (!rawText.trim()) {
+          throw new Error(
+            `Codex completed without text: status=${completedTurn.status}; error=${completedTurn.error?.message || "none"}; streamed=${streamedText.length}; items=${completedItems.length}; rawItems=${rawItems.length}`,
+          );
+        }
+        cleanup();
+        resolve(parseJsonFromText(rawText));
+      } catch (error) {
+        cleanup();
+        reject(error);
+      }
+    });
+  });
+}
+
+const server = http.createServer(async (request, response) => {
+  if (request.method === "OPTIONS") {
+    sendJson(response, 204, {});
+    return;
+  }
+  if (request.method === "GET" && request.url === "/healthz") {
+    sendJson(response, 200, { ok: true, codexUrl });
+    return;
+  }
+  if (request.method !== "POST" || request.url !== "/codex-json") {
+    sendJson(response, 404, { error: "not_found" });
+    return;
+  }
+  try {
+    const payload = JSON.parse(await readBody(request));
+    const result = await codexRequest(payload);
+    sendJson(response, 200, { result });
+  } catch (error) {
+    sendJson(response, 500, { error: error.message });
+  }
+});
+
+server.listen(bridgePort, "127.0.0.1", () => {
+  console.log(`codex-ai-bridge listening on http://127.0.0.1:${bridgePort}`);
+  console.log(`using codex app server ${codexUrl}`);
+});

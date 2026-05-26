@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "policy-chat-message.schema.json",
+  "title": "PolicyChatMessage",
+  "type": "object",
+  "required": ["role", "text"],
+  "properties": {
+    "role": { "type": "string", "enum": ["user", "assistant", "system"] },
+    "text": { "type": "string" },
+    "createdAt": { "type": "string" },
+    "references": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": false
+}

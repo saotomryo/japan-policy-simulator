@@ -1,0 +1,275 @@
+{
+  "scenario": {
+    "id": "school",
+    "title": "学園自治シミュレーター",
+    "termLabel": "1学期",
+    "seed": "S-1042"
+  },
+  "metrics": [
+    { "id": "support", "label": "生徒支持", "value": 68, "delta": 6, "tone": "good", "visible": true },
+    { "id": "happiness", "label": "幸福度", "value": 61, "delta": 4, "tone": "good", "visible": false },
+    { "id": "academic", "label": "成績", "value": 52, "delta": -2, "tone": "warn", "visible": true },
+    { "id": "fairness", "label": "公平感", "value": 43, "delta": -7, "tone": "risk", "visible": false },
+    { "id": "rule", "label": "校則納得", "value": 48, "delta": -4, "tone": "warn", "visible": true },
+    { "id": "participation", "label": "参加率", "value": 57, "delta": 8, "tone": "good", "visible": true },
+    { "id": "externalReputation", "label": "対外評価", "value": 55, "delta": 3, "tone": "good", "visible": false },
+    { "id": "externalAchievements", "label": "対外実績", "value": 49, "delta": -1, "tone": "warn", "visible": false },
+    { "id": "teacherSatisfaction", "label": "教師満足度", "value": 46, "delta": -5, "tone": "warn", "visible": false }
+  ],
+  "financeMetrics": [
+    { "id": "budget", "label": "予算", "value": 120000, "unit": "", "delta": 0, "tone": "good" },
+    { "id": "cash", "label": "キャッシュ", "value": 42000, "unit": "", "delta": -18000, "tone": "warn" }
+  ],
+  "hiddenScores": [
+    { "id": "trust", "label": "信頼の蓄積", "hint": "発言と施策の一貫性から変動" },
+    { "id": "polarization", "label": "分断リスク", "hint": "少数派の継続的な不満から変動" },
+    { "id": "fatigue", "label": "制度疲労", "hint": "教師負担と運用複雑性から変動" },
+    { "id": "publicValue", "label": "長期公共性", "hint": "人気と成果のズレから変動" }
+  ],
+  "annualSignals": [
+    { "label": "見える成果", "value": "B", "text": "支持率と参加率は改善傾向" },
+    { "label": "内部評価", "value": "?", "text": "年度末レポートまで非公開" },
+    { "label": "次回公開", "value": "3学期後", "text": "1年間の運営結果に反映" }
+  ],
+  "trend": [
+    { "term": "前々学期", "support": 54, "happiness": 50, "fairness": 58 },
+    { "term": "前学期", "support": 62, "happiness": 55, "fairness": 50 },
+    { "term": "今学期", "support": 68, "happiness": 61, "fairness": 43 }
+  ],
+  "seasonalEvents": [
+    {
+      "id": "sports_festival",
+      "term": 1,
+      "title": "体育祭",
+      "status": "準備中",
+      "summary": "参加率とクラス間の一体感を上げやすい一方、暑さ対策と教師負担が論点になりやすい。",
+      "impactMetrics": ["参加率", "教師満足度", "幸福度"],
+      "risks": ["暑熱対応の不足", "運営準備の負担増"]
+    },
+    {
+      "id": "school_festival",
+      "term": 2,
+      "title": "学園祭",
+      "status": "企画期",
+      "summary": "対外評価と部活動・文化活動の実績を伸ばす機会。予算配分と参加格差が表面化しやすい。",
+      "impactMetrics": ["対外評価", "対外実績", "参加率", "公平感"],
+      "risks": ["一部団体への負担集中", "来場者対応の品質低下"]
+    },
+    {
+      "id": "club_tournament_season",
+      "term": 2,
+      "title": "部活動大会シーズン",
+      "status": "予定",
+      "summary": "対外実績を伸ばす機会だが、文化部・運動部間の支援格差が議論になりやすい。",
+      "impactMetrics": ["対外実績", "公平感", "教師満足度"],
+      "risks": ["引率負担", "予算配分への不満"]
+    }
+  ],
+  "groups": [
+    { "id": "freedom", "label": "自由重視層", "positive": 68, "neutral": 20, "negative": 12 },
+    { "id": "exam", "label": "受験重視層", "positive": 34, "neutral": 42, "negative": 24 },
+    { "id": "club", "label": "部活重視層", "positive": 48, "neutral": 29, "negative": 23 },
+    { "id": "rule", "label": "校則重視層", "positive": 22, "neutral": 35, "negative": 43 },
+    { "id": "lowIncome", "label": "経済的に厳しい層", "positive": 18, "neutral": 31, "negative": 51 }
+  ],
+  "voices": [
+    {
+      "id": "voice_misaki",
+      "name": "美咲",
+      "group": "自由重視層",
+      "mood": "要望",
+      "text": "制服のままだと暑くて集中できない。夏だけでも選べる服装にしてほしい。",
+      "avatar": { "slot": "sky", "label": "美" }
+    },
+    {
+      "id": "voice_riku",
+      "name": "陸",
+      "group": "受験重視層",
+      "mood": "懸念",
+      "text": "自由化より自習室の席不足がつらい。放課後に静かに勉強できる場所が足りない。",
+      "avatar": { "slot": "green", "label": "陸" }
+    },
+    {
+      "id": "voice_aoi",
+      "name": "葵",
+      "group": "経済的に厳しい層",
+      "mood": "少数意見",
+      "text": "私服の日が増えると、服装で家庭の差が見えそうで不安。",
+      "avatar": { "slot": "rose", "label": "葵" }
+    }
+  ],
+  "voiceAnalysis": {
+    "populationSize": 420,
+    "sampledOpinionCount": 96,
+    "embeddingModel": "local-sample",
+    "clusters": [
+      {
+        "id": "uniform_freedom",
+        "label": "服装自由度",
+        "size": 118,
+        "sentiment": 0.62,
+        "x": 72,
+        "y": 72,
+        "keywords": ["暑さ", "自由", "集中", "選択制"],
+        "summary": "制服の暑さや窮屈さを問題にし、夏季限定の選択制を求める声。",
+        "representativeVoiceIds": ["voice_misaki"]
+      },
+      {
+        "id": "equity_anxiety",
+        "label": "格差不安",
+        "size": 54,
+        "sentiment": -0.48,
+        "x": 142,
+        "y": 128,
+        "keywords": ["私服", "家庭差", "同調圧力", "相談"],
+        "summary": "自由化に賛成しつつも、服装で家庭状況が見えることを心配する少数派の声。",
+        "representativeVoiceIds": ["voice_aoi"]
+      },
+      {
+        "id": "study_space",
+        "label": "自習環境",
+        "size": 87,
+        "sentiment": -0.36,
+        "x": 292,
+        "y": 92,
+        "keywords": ["自習室", "放課後", "静か", "受験"],
+        "summary": "成績や受験を意識し、放課後に静かな学習場所が足りないという声。",
+        "representativeVoiceIds": ["voice_riku"]
+      },
+      {
+        "id": "club_budget",
+        "label": "部活動予算",
+        "size": 62,
+        "sentiment": -0.22,
+        "x": 318,
+        "y": 154,
+        "keywords": ["予算", "文化部", "大会", "不公平"],
+        "summary": "大会実績のある部活へ予算が偏り、文化活動側の納得感が下がっている声。",
+        "representativeVoiceIds": []
+      },
+      {
+        "id": "rule_stability",
+        "label": "校則安定",
+        "size": 71,
+        "sentiment": -0.18,
+        "x": 92,
+        "y": 174,
+        "keywords": ["基準", "混乱", "先生負担", "公平"],
+        "summary": "自由化で基準が曖昧になり、運用が混乱することを心配する声。",
+        "representativeVoiceIds": []
+      }
+    ],
+    "distances": [
+      { "from": "uniform_freedom", "to": "equity_anxiety", "distance": 0.24, "label": "同じ服装論点だが価値観が対立" },
+      { "from": "uniform_freedom", "to": "rule_stability", "distance": 0.38, "label": "自由度と運用安定の緊張" },
+      { "from": "equity_anxiety", "to": "rule_stability", "distance": 0.32, "label": "公平性を共有する近い論点" },
+      { "from": "study_space", "to": "club_budget", "distance": 0.41, "label": "放課後資源の配分問題" },
+      { "from": "uniform_freedom", "to": "study_space", "distance": 0.72, "label": "生活快適性と学習環境で遠い" },
+      { "from": "equity_anxiety", "to": "club_budget", "distance": 0.58, "label": "公平性は共有するが対象資源が違う" }
+    ],
+    "hierarchy": {
+      "label": "全体の声",
+      "size": 420,
+      "children": [
+        {
+          "label": "服装・校則",
+          "size": 243,
+          "children": [
+            { "clusterId": "uniform_freedom", "label": "服装自由度", "size": 118 },
+            { "clusterId": "equity_anxiety", "label": "格差不安", "size": 54 },
+            { "clusterId": "rule_stability", "label": "校則安定", "size": 71 }
+          ]
+        },
+        {
+          "label": "放課後資源",
+          "size": 149,
+          "children": [
+            { "clusterId": "study_space", "label": "自習環境", "size": 87 },
+            { "clusterId": "club_budget", "label": "部活動予算", "size": 62 }
+          ]
+        }
+      ]
+    }
+  },
+  "issues": [
+    {
+      "id": "uniform",
+      "title": "服装自由度と公平性",
+      "fit": 86,
+      "metrics": ["幸福度", "校則納得", "公平感"],
+      "summary": "暑さへの不満が強い一方、私服化による格差可視化を心配する声がある。"
+    },
+    {
+      "id": "study",
+      "title": "自習室不足",
+      "fit": 74,
+      "metrics": ["成績", "参加率"],
+      "summary": "受験重視層を中心に、静かな学習場所の不足が課題として浮上している。"
+    },
+    {
+      "id": "club",
+      "title": "部活動予算の偏り",
+      "fit": 63,
+      "metrics": ["公平感", "参加率"],
+      "summary": "大会実績のある部活に予算が集まり、文化活動層の納得度が下がっている。"
+    }
+  ],
+  "issueSelectionChat": {
+    "title": "課題選択チャット",
+    "messages": [
+      {
+        "role": "assistant",
+        "text": "今学期はキャッシュ42000の範囲で実行可能性を見ると、服装自由度と公平性を主課題にしつつ、自習環境への副作用も確認するのが現実的です。"
+      },
+      {
+        "role": "user",
+        "text": "公平性への不安を抑えながら、生徒の自由度も上げる切り口はありますか？"
+      },
+      {
+        "role": "assistant",
+        "text": "夏季限定、低価格推奨服、相談窓口の3点を組み合わせると、自由度と格差対策を同時に扱えます。"
+      }
+    ],
+    "selectedIssueId": "uniform"
+  },
+  "policy": {
+    "id": "summer_uniform_low_cost",
+    "title": "夏季選択制服 + 低価格推奨服制度",
+    "summary": "夏季だけ選択制服を認め、購入を前提にしない低価格・手持ち服の基準と相談導線をセットにする。",
+    "budget": 18000,
+    "cashUse": 18000,
+    "financePlan": "キャッシュ内で実施",
+    "covers": ["服装自由度と公平性", "経済格差への配慮"],
+    "implementationDetails": [
+      "夏季期間だけ、制服または指定条件を満たす軽装を選べるようにする。",
+      "購入不要で参加できる例と低価格推奨品を示し、経済的な相談窓口を案内する。",
+      "服装確認は明文化した基準に限定し、教師の判断負担を抑える。"
+    ],
+    "expectedEffects": [
+      "暑さによる不快感を下げ、幸福度と授業集中を改善する。",
+      "低価格・購入不要の基準により、公平感の低下を抑える。",
+      "相談導線を作ることで、少数派の不安を早めに拾える。"
+    ],
+    "concerns": [
+      "基準が曖昧だと教師負担が増える。",
+      "服装の自由化が見た目の同調圧力につながる可能性がある。"
+    ],
+    "beneficiaryGroups": [
+      { "groupId": "freedom", "label": "自由重視層", "reason": "服装選択の自由が広がり、暑さや自己表現への不満が下がる。" },
+      { "groupId": "lowIncome", "label": "経済的に厳しい層", "reason": "購入不要の基準と相談導線があるため、参加コストへの不安を下げやすい。" }
+    ],
+    "lowBenefitGroups": [
+      { "groupId": "exam", "label": "受験重視層", "reason": "学習環境や成績への直接効果は限定的に見える。" },
+      { "groupId": "rule", "label": "校則重視層", "reason": "運用基準が緩むことへの不安が残る可能性がある。" }
+    ],
+    "shortTermEffects": { "happiness": 8, "rule": 5, "fairness": 2, "support": 3 },
+    "longTermEffects": { "trust": 3, "fatigue": 2, "polarization": -1 },
+    "risks": ["教師負担の増加", "同調圧力の発生"],
+    "effects": [
+      { "label": "幸福度", "value": 8, "tone": "good" },
+      { "label": "校則納得", "value": 5, "tone": "good" },
+      { "label": "公平感", "value": 2, "tone": "good" },
+      { "label": "教師負担", "value": -3, "tone": "warn" }
+    ]
+  }
+}

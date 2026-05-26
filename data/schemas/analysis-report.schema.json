@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "analysis-report.schema.json",
+  "title": "AnalysisReport",
+  "type": "object",
+  "required": ["issueId", "summary", "keyFindings", "tradeoffs", "minorityConcerns", "recommendedDiscussionPoints"],
+  "properties": {
+    "issueId": { "type": "string" },
+    "summary": { "type": "string" },
+    "keyFindings": { "type": "array", "items": { "type": "string" } },
+    "tradeoffs": { "type": "array", "items": { "type": "string" } },
+    "minorityConcerns": { "type": "array", "items": { "type": "string" } },
+    "recommendedDiscussionPoints": { "type": "array", "items": { "type": "string" } },
+    "financeNotes": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": false
+}

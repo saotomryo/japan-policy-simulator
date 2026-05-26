@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "issue-selection-chat-response.schema.json",
+  "title": "IssueSelectionChatResponse",
+  "type": "object",
+  "required": ["message", "recommendedIssueIds", "reasoning", "questionsToUser"],
+  "properties": {
+    "message": { "type": "string" },
+    "recommendedIssueIds": { "type": "array", "items": { "type": "string" } },
+    "reasoning": { "type": "array", "items": { "type": "string" } },
+    "questionsToUser": { "type": "array", "items": { "type": "string" } },
+    "financeAssessment": {
+      "type": "object",
+      "properties": {
+        "cashFeasibleIssueIds": { "type": "array", "items": { "type": "string" } },
+        "requiresBudgetReallocationIssueIds": { "type": "array", "items": { "type": "string" } },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

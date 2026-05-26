@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "policy-draft.schema.json",
+  "title": "PolicyDraft",
+  "type": "object",
+  "required": [
+    "id",
+    "title",
+    "summary",
+    "primaryIssueId",
+    "budget",
+    "cashUse",
+    "financePlan",
+    "implementationDetails",
+    "expectedEffects",
+    "concerns",
+    "beneficiaryGroups",
+    "lowBenefitGroups",
+    "shortTermEffects",
+    "longTermEffects",
+    "risks"
+  ],
+  "properties": {
+    "id": { "type": "string" },
+    "title": { "type": "string" },
+    "summary": { "type": "string" },
+    "primaryIssueId": { "type": "string" },
+    "secondaryIssueIds": { "type": "array", "items": { "type": "string" } },
+    "budget": { "type": "number", "minimum": 0 },
+    "cashUse": { "type": "number", "minimum": 0 },
+    "financePlan": { "type": "string" },
+    "implementationDetails": { "type": "array", "items": { "type": "string" } },
+    "expectedEffects": { "type": "array", "items": { "type": "string" } },
+    "concerns": { "type": "array", "items": { "type": "string" } },
+    "beneficiaryGroups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["groupId", "label", "reason"],
+        "properties": {
+          "groupId": { "type": "string" },
+          "label": { "type": "string" },
+          "reason": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "lowBenefitGroups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["groupId", "label", "reason"],
+        "properties": {
+          "groupId": { "type": "string" },
+          "label": { "type": "string" },
+          "reason": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "shortTermEffects": {
+      "type": "object",
+      "properties": {
+        "support": { "type": "number" },
+        "happiness": { "type": "number" },
+        "academic": { "type": "number" },
+        "fairness": { "type": "number" },
+        "rule": { "type": "number" },
+        "participation": { "type": "number" },
+        "externalReputation": { "type": "number" },
+        "externalAchievements": { "type": "number" },
+        "teacherSatisfaction": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
+    "longTermEffects": {
+      "type": "object",
+      "properties": {
+        "trust": { "type": "number" },
+        "polarization": { "type": "number" },
+        "fatigue": { "type": "number" },
+        "publicValue": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
+    "risks": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "finance-plan.schema.json",
+  "title": "FinancePlan",
+  "type": "object",
+  "required": ["totalCost", "cashUse", "budgetReallocation", "summary", "risks"],
+  "properties": {
+    "totalCost": { "type": "number", "minimum": 0 },
+    "cashUse": { "type": "number", "minimum": 0 },
+    "budgetReallocation": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["source", "amount", "impact"],
+        "properties": {
+          "source": { "type": "string" },
+          "amount": { "type": "number", "minimum": 0 },
+          "impact": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "summary": { "type": "string" },
+    "risks": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": false
+}
