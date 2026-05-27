@@ -19,7 +19,13 @@
     { "id": "externalAchievements", "label": "サプライチェーン安定度", "value": 61, "delta": 0, "tone": "good", "visible": false, "category": "international", "sourceType": "fixed_virtual", "baseYear": 2025, "description": "通商・供給網の安定性" },
     { "id": "teacherSatisfaction", "label": "行政現場負荷", "value": 61, "delta": 2, "tone": "warn", "visible": false, "category": "implementation", "sourceType": "ai_estimated", "baseYear": 2025, "description": "制度実装に伴う行政現場の負荷" },
     { "id": "fiscalCapacity", "label": "財政余力", "value": 41, "delta": -2, "tone": "risk", "visible": true, "category": "finance", "sourceType": "official_stat_reference", "baseYear": 2025, "description": "追加政策を支える財政的な余力" },
-    { "id": "socialSecurity", "label": "社会保障持続性", "value": 45, "delta": -1, "tone": "warn", "visible": true, "category": "finance", "sourceType": "official_stat_reference", "baseYear": 2025, "description": "社会保障制度の持続性に関する参考スコア" }
+    { "id": "socialSecurity", "label": "社会保障持続性", "value": 45, "delta": -1, "tone": "warn", "visible": true, "category": "finance", "sourceType": "official_stat_reference", "baseYear": 2025, "description": "社会保障制度の持続性に関する参考スコア" },
+    { "id": "economicRipple", "label": "経済波及効果", "value": 56, "delta": 2, "tone": "good", "visible": true, "category": "economy", "sourceType": "ai_estimated", "baseYear": 2025, "description": "政策が国内需要、産業活動、投資心理へ与える総合的な短期影響" },
+    { "id": "importIndustryImpact", "label": "輸入業影響", "value": 58, "delta": 2, "tone": "good", "visible": false, "category": "industry", "sourceType": "ai_estimated", "baseYear": 2025, "description": "輸入品需要、為替感応度、物流コストを踏まえた業界影響" },
+    { "id": "exportIndustryImpact", "label": "輸出業影響", "value": 51, "delta": 0, "tone": "warn", "visible": false, "category": "industry", "sourceType": "ai_estimated", "baseYear": 2025, "description": "外需、為替、海外需要との関係を踏まえた業界影響" },
+    { "id": "manufacturingImpact", "label": "製造業影響", "value": 54, "delta": 1, "tone": "warn", "visible": false, "category": "industry", "sourceType": "ai_estimated", "baseYear": 2025, "description": "部材調達、国内需要、設備投資心理への影響" },
+    { "id": "agricultureImpact", "label": "農業影響", "value": 49, "delta": 0, "tone": "warn", "visible": false, "category": "industry", "sourceType": "ai_estimated", "baseYear": 2025, "description": "燃料・肥料・流通コストと家計需要を踏まえた影響" },
+    { "id": "financeIndustryImpact", "label": "金融業影響", "value": 47, "delta": -1, "tone": "warn", "visible": false, "category": "industry", "sourceType": "ai_estimated", "baseYear": 2025, "description": "財政見通し、金利、消費者信用への影響" }
   ],
   "financeMetrics": [
     { "id": "budget", "label": "政策コスト枠", "value": 120000, "unit": "億円", "delta": 0, "tone": "warn" },
@@ -91,33 +97,33 @@
       "id": "consumption_tax_cut",
       "title": "消費税減税",
       "fit": 88,
-      "metrics": ["税負担感", "家計可処分所得", "財政余力", "社会保障持続性"],
+      "metrics": ["税負担感", "家計可処分所得", "財政余力", "社会保障持続性", "経済波及効果", "業界別影響"],
       "summary": "物価高対策として時限的に消費税率を引き下げ、家計負担を軽減する。",
       "field": "税制・家計支援",
-      "relatedMetricIds": ["rule", "academic", "fiscalCapacity", "socialSecurity", "support"],
-      "recommendedViews": ["income", "generation", "fiscal", "clusters"],
+      "relatedMetricIds": ["rule", "academic", "fiscalCapacity", "socialSecurity", "support", "economicRipple", "importIndustryImpact", "exportIndustryImpact", "manufacturingImpact", "agricultureImpact", "financeIndustryImpact"],
+      "recommendedViews": ["income", "generation", "industry", "fiscal", "clusters"],
       "fundingNote": "恒久化する場合は社会保障財源への補填策が必要。"
     },
     {
       "id": "child_support",
       "title": "子育て支援給付の拡充",
       "fit": 76,
-      "metrics": ["家計可処分所得", "世代間公平感", "政策納得度"],
+      "metrics": ["家計可処分所得", "世代間公平感", "政策納得度", "経済波及効果", "業界別影響"],
       "summary": "子育て世帯への給付を増やし、出生・家計不安に対応する。",
       "field": "子育て・社会保障",
-      "relatedMetricIds": ["academic", "fairness", "support", "fiscalCapacity"],
-      "recommendedViews": ["generation", "income", "regional", "fiscal"],
+      "relatedMetricIds": ["academic", "fairness", "support", "fiscalCapacity", "economicRipple", "manufacturingImpact", "agricultureImpact", "financeIndustryImpact"],
+      "recommendedViews": ["generation", "income", "industry", "regional", "fiscal"],
       "fundingNote": "対象設計と所得制限の有無で賛否が分かれる。"
     },
     {
       "id": "gov_dx",
       "title": "行政DXの推進",
       "fit": 69,
-      "metrics": ["行政現場負荷", "政策納得度", "国際信頼度"],
+      "metrics": ["行政現場負荷", "政策納得度", "国際信頼度", "経済波及効果", "業界別影響"],
       "summary": "行政手続きのデジタル化で利用者負担と現場負荷を下げる。",
       "field": "行政改革・デジタル",
-      "relatedMetricIds": ["teacherSatisfaction", "support", "externalReputation"],
-      "recommendedViews": ["implementation", "digital_access", "generation", "clusters"],
+      "relatedMetricIds": ["teacherSatisfaction", "support", "externalReputation", "economicRipple", "financeIndustryImpact", "manufacturingImpact"],
+      "recommendedViews": ["implementation", "digital_access", "industry", "generation", "clusters"],
       "fundingNote": "初期投資と移行期の現場負荷が論点。"
     }
   ],
@@ -126,21 +132,21 @@
       "id": "consumption_tax_cut",
       "title": "消費税減税",
       "fit": 88,
-      "metrics": ["税負担感", "家計可処分所得", "財政余力", "社会保障持続性"],
+      "metrics": ["税負担感", "家計可処分所得", "財政余力", "社会保障持続性", "経済波及効果", "業界別影響"],
       "summary": "物価高対策として時限的に消費税率を引き下げ、家計負担を軽減する。"
     },
     {
       "id": "child_support",
       "title": "子育て支援給付の拡充",
       "fit": 76,
-      "metrics": ["家計可処分所得", "世代間公平感", "政策納得度"],
+      "metrics": ["家計可処分所得", "世代間公平感", "政策納得度", "経済波及効果", "業界別影響"],
       "summary": "子育て世帯への給付を増やし、出生・家計不安に対応する。"
     },
     {
       "id": "gov_dx",
       "title": "行政DXの推進",
       "fit": 69,
-      "metrics": ["行政現場負荷", "政策納得度", "国際信頼度"],
+      "metrics": ["行政現場負荷", "政策納得度", "国際信頼度", "経済波及効果", "業界別影響"],
       "summary": "行政手続きのデジタル化で利用者負担と現場負荷を下げる。"
     }
   ],
@@ -282,6 +288,13 @@
       { "segmentId": "income_middle", "segmentLabel": "中間層", "axis": "income", "applicability": "applicable", "effectScore": 11, "benefitLevel": "medium", "riskLevel": "low", "summary": "広い層に便益が出るが、財源説明への関心も高い。", "reason": "支出規模と税負担感の双方が大きいため" },
       { "segmentId": "income_high", "segmentLabel": "高所得層", "axis": "income", "applicability": "applicable", "effectScore": 5, "benefitLevel": "low", "riskLevel": "low", "summary": "金額上の便益はあるが、相対的な生活改善効果は小さい。", "reason": "所得に占める消費税負担の比率が比較的小さいため" }
     ],
+    "industry": [
+      { "segmentId": "industry_import", "segmentLabel": "輸入業", "axis": "industry", "applicability": "applicable", "effectScore": 4, "benefitLevel": "medium", "riskLevel": "medium", "summary": "輸入消費財の需要増が見込める一方、為替や物流コストの影響を受けやすい。", "reason": "消費税減税で最終需要は押し上げられるが、円安時は仕入れコストが残るため" },
+      { "segmentId": "industry_export", "segmentLabel": "輸出業", "axis": "industry", "applicability": "applicable", "effectScore": 1, "benefitLevel": "low", "riskLevel": "low", "summary": "国内消費刺激の直接効果は限定的だが、国内景況感の改善は投資心理を下支えする。", "reason": "主な売上要因が外需と為替であり、消費税減税との連動が弱いため" },
+      { "segmentId": "industry_manufacturing", "segmentLabel": "製造業", "axis": "industry", "applicability": "applicable", "effectScore": 3, "benefitLevel": "medium", "riskLevel": "medium", "summary": "耐久財・生活関連製品には需要押し上げが出るが、原材料費と設備投資判断は別要因に左右される。", "reason": "国内需要の改善とコスト制約が同時に作用するため" },
+      { "segmentId": "industry_agriculture", "segmentLabel": "農業", "axis": "industry", "applicability": "applicable", "effectScore": 2, "benefitLevel": "low", "riskLevel": "medium", "summary": "食品需要は底堅くなるが、燃料・肥料・流通コストへの直接対策ではない。", "reason": "需要面の効果に比べ、生産コスト軽減の効果が限定的なため" },
+      { "segmentId": "industry_finance", "segmentLabel": "金融", "axis": "industry", "applicability": "applicable", "effectScore": -2, "benefitLevel": "low", "riskLevel": "medium", "summary": "消費者信用にはプラスだが、財源不安が強まると金利・国債市場への警戒が残る。", "reason": "短期需要改善と財政リスク評価が逆方向に働くため" }
+    ],
     "international": [
       { "segmentId": "international_relation", "segmentLabel": "国際関係", "axis": "international", "applicability": "low_relevance", "effectScore": null, "benefitLevel": "none", "riskLevel": "low", "summary": "消費税減税では国際関係への直接影響は限定的。", "reason": "主な効果が国内家計と財政に集中するため" }
     ]
@@ -335,12 +348,13 @@
       { "groupId": "fiscal_conservative", "label": "財政規律重視層", "reason": "財源補填と恒久化リスクへの懸念が残る。" },
       { "groupId": "indifferent", "label": "無関心層", "reason": "制度変更の時期や実感が伝わらないと関心を持ちにくい。" }
     ],
-    "shortTermEffects": { "support": 6, "happiness": 4, "academic": 8, "fairness": -3, "rule": -11, "participation": 2, "externalReputation": 0, "externalAchievements": 1, "teacherSatisfaction": -2 },
+    "shortTermEffects": { "support": 6, "happiness": 4, "academic": 8, "fairness": -3, "rule": -11, "participation": 2, "externalReputation": 0, "externalAchievements": 1, "teacherSatisfaction": -2, "economicRipple": 5, "importIndustryImpact": 4, "exportIndustryImpact": 1, "manufacturingImpact": 3, "agricultureImpact": 2, "financeIndustryImpact": -2 },
     "longTermEffects": { "trust": -2, "polarization": 3, "fatigue": 2, "publicValue": -1 },
     "risks": ["財源補填不足", "恒久化圧力", "社会保障財源への不安"],
     "effects": [
       { "label": "家計可処分所得", "value": 8, "tone": "good" },
       { "label": "税負担感", "value": -11, "tone": "good" },
+      { "label": "経済波及効果", "value": 5, "tone": "good" },
       { "label": "財政余力", "value": -7, "tone": "warn" },
       { "label": "社会保障持続性", "value": -4, "tone": "warn" }
     ]

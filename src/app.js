@@ -1128,7 +1128,7 @@ async function generateInitialStateWithAi() {
       requirements: [
         "表示する発話は代表例であり、背後に生徒数分の声がある想定にする",
         "voiceAnalysisには意見クラスター、距離、階層クラスタを含める",
-        "metricsのidは support, happiness, academic, fairness, rule, participation, externalReputation, externalAchievements, teacherSatisfaction を使う",
+        "metricsのidは support, happiness, academic, fairness, rule, participation, externalReputation, externalAchievements, teacherSatisfaction, fiscalCapacity, socialSecurity, economicRipple, importIndustryImpact, exportIndustryImpact, manufacturingImpact, agricultureImpact, financeIndustryImpact を使う",
         "externalReputation, externalAchievements, teacherSatisfaction は visible:false にする",
         "financeMetricsのidは budget, cash を使う",
         "issuesは3件以上",
@@ -1917,6 +1917,7 @@ function SourceTypeLabel(sourceType) {
 function AnalysisViewTabs(active = "related") {
   const tabs = [
     ["related", "関連指標"],
+    ["industry", "産業別"],
     ["fiscal", "財政"],
     ["social", "社会影響"],
     ["international", "国際関係"],
@@ -2815,6 +2816,7 @@ function VoicesView() {
           <div class="chart-tabs compact" role="tablist" aria-label="効果軸切替">
             <button class="active" type="button">所得別</button>
             <button type="button">世代別</button>
+            <button type="button">産業別</button>
             <button type="button">地域別</button>
             <button type="button">国際関係</button>
           </div>
@@ -2826,6 +2828,10 @@ function VoicesView() {
             <section>
               <h3>世代別の想定効果</h3>
               ${SegmentEffectList("generation")}
+            </section>
+            <section>
+              <h3>産業別の想定効果</h3>
+              ${SegmentEffectList("industry")}
             </section>
             <section>
               <h3>関連が薄い効果軸</h3>
@@ -2931,6 +2937,7 @@ function ResultView() {
             <button class="active" type="button">関連指標</button>
             <button type="button">所得別</button>
             <button type="button">世代別</button>
+            <button type="button">産業別</button>
             <button type="button">国際関係</button>
           </div>
           <div class="effect-grid">
@@ -2941,6 +2948,10 @@ function ResultView() {
             <section>
               <h3>世代別の短期効果</h3>
               ${SegmentEffectList("generation")}
+            </section>
+            <section>
+              <h3>産業別の短期効果</h3>
+              ${SegmentEffectList("industry")}
             </section>
           </div>
         </article>
