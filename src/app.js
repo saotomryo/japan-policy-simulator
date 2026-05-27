@@ -1014,6 +1014,7 @@ function applyPolicyDraft(draft, options = {}) {
     budget: draft.budget,
     cashUse: draft.cashUse,
     financePlan: draft.financePlan,
+    costBreakdown: draft.costBreakdown || appData.policy?.costBreakdown || [],
     implementationDetails: draft.implementationDetails?.length ? draft.implementationDetails : [draft.summary],
     expectedEffects: draft.expectedEffects?.length
       ? draft.expectedEffects
@@ -1089,6 +1090,7 @@ async function generatePolicyDraft() {
         "1つの施策で複数課題に対応してよい",
         "ガードレール上のリスクをrisksに入れる",
         "implementationDetailsには実施内容を3件程度入れる",
+        "costBreakdownには実施内容ごとのコスト項目、amount、target、calculation、fundingSource、detailsを入れる",
         "expectedEffectsには想定する効果を2件以上入れる",
         "concernsには懸念点を2件以上入れる",
         "beneficiaryGroupsにはメリットを享受する対象属性を入れる",
@@ -1164,6 +1166,7 @@ async function revisePolicyDraft(userText) {
       constraints: [
         "1学期に実施する施策は1つのままにする",
         "実施内容、想定効果、懸念点、メリットを享受する属性、メリットが薄い属性を必ず更新する",
+        "costBreakdownを更新し、何に対してどうコストがかかるかをdetailsまで示す",
         "キャッシュ範囲を大きく超える場合はfinancePlanとconcernsで明記する",
         "shortTermEffectsは現在のmetric idをキーにする",
       ],
@@ -2794,6 +2797,7 @@ function PolicyPreview() {
         <span>予算</span>
       </div>
       <div class="finance-note">${isNationalScenario() ? "短期財源使用" : "キャッシュ使用"}: ${policy.cashUse}</div>
+      ${isNationalScenario() && hasDraft ? PolicyCostBreakdown(policy) : ""}
       ${hasDraft ? PolicyDetailSections(policy) : ""}
       ${
         isNationalScenario()
@@ -2821,6 +2825,77 @@ function PolicyPreview() {
       ${!isNationalScenario() && canCreateAnnual ? `<button class="create-annual-report primary" type="button">年度末レポートを作成</button>` : ""}
       ${!isNationalScenario() && appData.annualReport ? `<div class="turn-complete-note">年度末レポート作成済みです。</div>` : ""}
     </article>
+  `;
+}
+
+function formatCostAmount(item) {
+  return `${Number(item.amount || 0).toLocaleString("ja-JP")}${item.unit || ""}`;
+}
+
+function PolicyCostBreakdown(policy) {
+  const breakdown = policy.costBreakdown || [];
+  if (!breakdown.length) {
+    return `
+      <section class="policy-cost-panel">
+        <div class="panel-head">
+          <h3>コスト試算</h3>
+          <span class="data-chip">内訳未生成</span>
+        </div>
+        <p>この政策案では、実施内容ごとのコスト内訳がまだ生成されていません。</p>
+      </section>
+    `;
+  }
+  const total = breakdown.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  return `
+    <section class="policy-cost-panel">
+      <div class="panel-head">
+        <h3>実施内容別コスト試算</h3>
+        <span class="data-chip">合計 ${total.toLocaleString("ja-JP")}${breakdown[0]?.unit || ""}</span>
+      </div>
+      <p>何に対してコストが発生するかを、税収減・直接給付・財源補填などの実施内容ごとに分けて表示します。</p>
+      <div class="cost-summary-grid">
+        <div><strong>${formatCostAmount({ amount: policy.budget, unit: "億円" })}</strong><span>政策総額</span></div>
+        <div><strong>${formatCostAmount({ amount: policy.cashUse, unit: "億円" })}</strong><span>短期財源使用</span></div>
+        <div><strong>${policy.financePlan}</strong><span>財源方針</span></div>
+      </div>
+      <div class="cost-breakdown-list">
+        ${breakdown.map(CostBreakdownItem).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function CostBreakdownItem(item) {
+  return `
+    <details class="cost-breakdown-item" open>
+      <summary>
+        <span>
+          <strong>${item.label}</strong>
+          <small>${item.costType || "費用"} / 対象: ${item.target || "未設定"}</small>
+        </span>
+        <b>${formatCostAmount(item)}</b>
+      </summary>
+      <div class="cost-breakdown-body">
+        <p>${item.calculation || ""}</p>
+        <div class="cost-meta-grid">
+          <div><strong>財源</strong><span>${item.fundingSource || "未設定"}</span></div>
+          <div><strong>費用種別</strong><span>${item.costType || "未設定"}</span></div>
+        </div>
+        <div class="cost-detail-list">
+          ${(item.details || [])
+            .map(
+              (detail) => `
+                <div>
+                  <span>${detail.label}</span>
+                  <strong>${formatCostAmount(detail)}</strong>
+                  <small>${detail.memo || ""}</small>
+                </div>
+              `,
+            )
+            .join("")}
+        </div>
+      </div>
+    </details>
   `;
 }
 

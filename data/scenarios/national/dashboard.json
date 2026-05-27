@@ -324,6 +324,53 @@
     "budget": 98000,
     "cashUse": 42000,
     "financePlan": "国債増発と一部歳出見直しを組み合わせる。恒久化は行わない。",
+    "costBreakdown": [
+      {
+        "id": "tax_revenue_gap",
+        "label": "消費税率引き下げによる税収減",
+        "amount": 76000,
+        "unit": "億円",
+        "costType": "税収減",
+        "target": "消費税収",
+        "calculation": "対象消費額に対する税率引き下げ分を1年分で試算",
+        "fundingSource": "国債増発と一部歳出見直し",
+        "details": [
+          { "label": "食料品・日用品など生活必需消費", "amount": 26000, "unit": "億円", "memo": "低所得層・中間層の負担軽減実感が大きい領域" },
+          { "label": "一般消費財・サービス消費", "amount": 38000, "unit": "億円", "memo": "小売・サービス業への需要下支えを想定" },
+          { "label": "制度移行時の税収タイミング差", "amount": 12000, "unit": "億円", "memo": "施行時期と申告・納付時期のずれによる短期資金需要" }
+        ]
+      },
+      {
+        "id": "low_income_transfer",
+        "label": "低所得世帯への追加給付",
+        "amount": 14000,
+        "unit": "億円",
+        "costType": "直接給付",
+        "target": "低所得世帯",
+        "calculation": "対象世帯数と1世帯あたり追加支援額から試算",
+        "fundingSource": "短期財源余地",
+        "details": [
+          { "label": "住民税非課税世帯向け給付", "amount": 9000, "unit": "億円", "memo": "逆進性対策として重点配分" },
+          { "label": "子育て低所得世帯への上乗せ", "amount": 3000, "unit": "億円", "memo": "食費・教育費負担の緩和を想定" },
+          { "label": "給付審査・振込事務", "amount": 2000, "unit": "億円", "memo": "自治体事務、通知、システム連携費" }
+        ]
+      },
+      {
+        "id": "social_security_backfill",
+        "label": "社会保障財源への一時補填",
+        "amount": 8000,
+        "unit": "億円",
+        "costType": "財源補填",
+        "target": "年金・医療・介護財源",
+        "calculation": "減税による社会保障財源の穴を一部補填する暫定枠",
+        "fundingSource": "歳出見直しと予備費",
+        "details": [
+          { "label": "医療・介護勘定への補填", "amount": 5000, "unit": "億円", "memo": "高齢層の財源不安を抑えるための説明枠" },
+          { "label": "制度終了時の出口対策準備", "amount": 2000, "unit": "億円", "memo": "時限措置終了後の反動を抑える広報・制度調整費" },
+          { "label": "予備費", "amount": 1000, "unit": "億円", "memo": "税収下振れ時の調整枠" }
+        ]
+      }
+    ],
     "covers": ["消費税減税", "低所得層の物価負担軽減", "社会保障財源への補填"],
     "implementationDetails": [
       "1年間の時限措置として消費税率を引き下げる。",
