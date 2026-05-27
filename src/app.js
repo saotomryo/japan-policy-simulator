@@ -5,6 +5,10 @@ let activeView = "dashboard";
 let activeVoiceChart = "map";
 let activeAnnualChart = "metrics";
 let selectedAnnualMetricIds = ["support", "academic", "rule", "participation"];
+let activeDashboardAnalysis = "related";
+let activeVoiceEffectAxis = "income";
+let activePolicyEffectAxis = "income";
+let activeResultEffectAxis = "related";
 
 const providerPresets = {
   sample: { label: "固定サンプル", baseUrl: "", model: "sample" },
@@ -1238,6 +1242,12 @@ function samplePolicySimulationResult() {
         teacherSatisfaction: -2,
         fiscalCapacity: -7,
         socialSecurity: -4,
+        economicRipple: 5,
+        importIndustryImpact: 4,
+        exportIndustryImpact: 1,
+        manufacturingImpact: 3,
+        agricultureImpact: 2,
+        financeIndustryImpact: -2,
       },
       hiddenScoreDeltas: {
         trust: -2,
@@ -1904,6 +1914,19 @@ function selectedPolicyTarget() {
   return (appData.policyTargets || appData.issues || []).find((target) => target.id === selectedId) || (appData.policyTargets || appData.issues || [])[0];
 }
 
+function effectAxisFromRecommended(views = []) {
+  const supported = ["income", "generation", "industry", "regional", "international", "fiscal", "implementation", "digital_access"];
+  return views.find((view) => supported.includes(view)) || "income";
+}
+
+function resetPolicyDrivenViews(policyTarget = selectedPolicyTarget()) {
+  const axis = effectAxisFromRecommended(policyTarget?.recommendedViews || []);
+  activeDashboardAnalysis = ["implementation", "industry", "fiscal", "international", "social"].includes(axis) ? axis : "related";
+  activeVoiceEffectAxis = axis;
+  activePolicyEffectAxis = axis;
+  activeResultEffectAxis = "related";
+}
+
 function SourceTypeLabel(sourceType) {
   const labels = {
     official_stat: "実統計値",
@@ -1917,15 +1940,89 @@ function SourceTypeLabel(sourceType) {
 function AnalysisViewTabs(active = "related") {
   const tabs = [
     ["related", "関連指標"],
+    ["all", "全体"],
     ["industry", "産業別"],
     ["fiscal", "財政"],
-    ["social", "社会影響"],
     ["international", "国際関係"],
-    ["all", "全体"],
+    ["social", "社会影響"],
+    ["implementation", "実装リスク"],
   ];
   return `
     <div class="chart-tabs compact" role="tablist" aria-label="分析ビュー切替">
-      ${tabs.map(([id, label]) => `<button class="${active === id ? "active" : ""}" type="button">${label}</button>`).join("")}
+      ${tabs.map(([id, label]) => `<button class="${active === id ? "active" : ""}" type="button" data-dashboard-analysis="${id}">${label}</button>`).join("")}
+    </div>
+  `;
+}
+
+function EffectAxisTabs(active, datasetName = "effectAxis", options = {}) {
+  const tabs = [
+    ...(options.includeRelated ? [["related", "関連指標"]] : []),
+    ["income", "所得別"],
+    ["generation", "世代別"],
+    ["industry", "産業別"],
+    ["regional", "地域別"],
+    ["international", "国際関係"],
+    ["fiscal", "財政影響"],
+    ["implementation", "実装リスク"],
+    ["digital_access", "デジタル利用度"],
+  ];
+  const attr = datasetName.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`);
+  return `
+    <div class="chart-tabs compact" role="tablist" aria-label="効果軸切替">
+      ${tabs.map(([id, label]) => `<button class="${active === id ? "active" : ""}" type="button" data-${attr}="${id}">${label}</button>`).join("")}
+    </div>
+  `;
+}
+
+function effectAxisTitle(axis) {
+  const titles = {
+    income: "所得別",
+    generation: "世代別",
+    industry: "産業別",
+    regional: "地域別",
+    international: "国際関係",
+    fiscal: "財政影響",
+    implementation: "実装リスク",
+    digital_access: "デジタル利用度",
+  };
+  return titles[axis] || axis;
+}
+
+function dashboardMetricsFor(view) {
+  const targetMetricIds = selectedPolicyTarget()?.relatedMetricIds || [];
+  const categories = {
+    fiscal: ["finance"],
+    social: ["social"],
+    international: ["international"],
+    industry: ["industry", "economy"],
+    implementation: ["implementation"],
+    digital_access: ["implementation"],
+  };
+  if (view === "all") return appData.metrics;
+  if (view === "related") return appData.metrics.filter((metric) => targetMetricIds.includes(metric.id) || metric.visible);
+  const allowedCategories = categories[view] || [];
+  const categoryMetrics = appData.metrics.filter((metric) => allowedCategories.includes(metric.category));
+  return categoryMetrics.length ? categoryMetrics : appData.metrics.filter((metric) => targetMetricIds.includes(metric.id));
+}
+
+function MetricDetailList(view = activeDashboardAnalysis) {
+  const metrics = dashboardMetricsFor(view);
+  if (!metrics.length) return `<div class="empty-note">この政策では、${effectAxisTitle(view)}に対応する指標はまだ生成されていません。</div>`;
+  return `
+    <div class="metric-detail-list">
+      ${metrics
+        .slice(0, 10)
+        .map(
+          (metric) => `
+            <div class="metric-detail-row ${metricTone(metric)}">
+              <strong>${metric.label}</strong>
+              <span>${metric.value}${metric.unit || ""}</span>
+              <small>${SourceTypeLabel(metric.sourceType)} / ${metric.baseYear || appData.scenario.baseYear || "-"}</small>
+              <p>${metric.description || ""}</p>
+            </div>
+          `,
+        )
+        .join("")}
     </div>
   `;
 }
@@ -1933,7 +2030,7 @@ function AnalysisViewTabs(active = "related") {
 function SegmentEffectList(axis) {
   const effects = appData.segmentEffects?.[axis] || [];
   if (!effects.length) {
-    return `<div class="empty-note">この政策では、${axis}別の効果は該当性が低いか、まだ生成されていません。</div>`;
+    return `<div class="empty-note">この政策では、${effectAxisTitle(axis)}の効果は該当性が低いか、まだ生成されていません。</div>`;
   }
   return `
     <div class="segment-effect-list">
@@ -1981,6 +2078,27 @@ function NationalRelationPanel() {
           .join("")}
       </div>
     </article>
+  `;
+}
+
+function ResultEffectContent(axis = activeResultEffectAxis) {
+  if (axis === "related") {
+    return `
+      <section>
+        <h3>関連指標の短期効果</h3>
+        <div class="impact-list">
+          ${(appData.policy.effects || [])
+            .map((effect) => `<span class="${effect.tone}">${effect.label} ${effect.value > 0 ? "+" : ""}${effect.value}</span>`)
+            .join("")}
+        </div>
+      </section>
+    `;
+  }
+  return `
+    <section>
+      <h3>${effectAxisTitle(axis)}の短期効果</h3>
+      ${SegmentEffectList(axis)}
+    </section>
   `;
 }
 
@@ -2530,15 +2648,10 @@ function PolicyPreview() {
       ${hasDraft ? PolicyDetailSections(policy) : ""}
       ${
         isNationalScenario()
-          ? `<div class="chart-tabs compact" role="tablist" aria-label="政策案分析ビュー">
-              <button class="active" type="button">所得別</button>
-              <button type="button">世代別</button>
-              <button type="button">クラスター別</button>
-              <button type="button">国際関係</button>
-              <button type="button">財政・実装</button>
-            </div>
+          ? `${EffectAxisTabs(activePolicyEffectAxis, "policyEffectAxis")}
             <div class="policy-target-meta">
-              <div><strong>推奨ビュー</strong><span>所得別 / 世代別 / 財政</span></div>
+              <div><strong>表示中の効果軸</strong><span>${effectAxisTitle(activePolicyEffectAxis)}</span></div>
+              <div><strong>想定効果</strong><span>${(appData.segmentEffects?.[activePolicyEffectAxis] || []).map((effect) => `${effect.segmentLabel}: ${effect.effectScore ?? "N/A"}`).join(" / ") || "この軸は該当性が低いか、まだ生成されていません。"}</span></div>
               <div><strong>長期影響</strong><span>確定結果ではなく予想として表示</span></div>
             </div>`
           : ""
@@ -2710,23 +2823,8 @@ function DashboardView() {
             </div>
             <small>relatedMetricIds</small>
           </div>
-          ${AnalysisViewTabs("related")}
-          <div class="metric-detail-list">
-            ${appData.metrics
-              .filter((metric) => (selectedPolicyTarget()?.relatedMetricIds || []).includes(metric.id) || metric.visible)
-              .slice(0, 8)
-              .map(
-                (metric) => `
-                  <div class="metric-detail-row ${metricTone(metric)}">
-                    <strong>${metric.label}</strong>
-                    <span>${metric.value}${metric.unit || ""}</span>
-                    <small>${SourceTypeLabel(metric.sourceType)} / ${metric.baseYear || appData.scenario.baseYear || "-"}</small>
-                    <p>${metric.description || ""}</p>
-                  </div>
-                `,
-              )
-              .join("")}
-          </div>
+          ${AnalysisViewTabs(activeDashboardAnalysis)}
+          ${MetricDetailList(activeDashboardAnalysis)}
         </article>
         <article class="panel sentiment-panel">
           <div class="panel-header">
@@ -2813,29 +2911,11 @@ function VoicesView() {
             </div>
             <small>recommendedViews</small>
           </div>
-          <div class="chart-tabs compact" role="tablist" aria-label="効果軸切替">
-            <button class="active" type="button">所得別</button>
-            <button type="button">世代別</button>
-            <button type="button">産業別</button>
-            <button type="button">地域別</button>
-            <button type="button">国際関係</button>
-          </div>
+          ${EffectAxisTabs(activeVoiceEffectAxis, "voiceEffectAxis")}
           <div class="effect-grid">
             <section>
-              <h3>所得別の想定効果</h3>
-              ${SegmentEffectList("income")}
-            </section>
-            <section>
-              <h3>世代別の想定効果</h3>
-              ${SegmentEffectList("generation")}
-            </section>
-            <section>
-              <h3>産業別の想定効果</h3>
-              ${SegmentEffectList("industry")}
-            </section>
-            <section>
-              <h3>関連が薄い効果軸</h3>
-              ${SegmentEffectList("international")}
+              <h3>${effectAxisTitle(activeVoiceEffectAxis)}の想定効果</h3>
+              ${SegmentEffectList(activeVoiceEffectAxis)}
             </section>
           </div>
         </article>
@@ -2933,26 +3013,9 @@ function ResultView() {
             <small>単発実行</small>
           </div>
           ${TurnResultPreview()}
-          <div class="chart-tabs compact" role="tablist" aria-label="実行結果ビュー切替">
-            <button class="active" type="button">関連指標</button>
-            <button type="button">所得別</button>
-            <button type="button">世代別</button>
-            <button type="button">産業別</button>
-            <button type="button">国際関係</button>
-          </div>
+          ${EffectAxisTabs(activeResultEffectAxis, "resultEffectAxis", { includeRelated: true })}
           <div class="effect-grid">
-            <section>
-              <h3>所得別の短期効果</h3>
-              ${SegmentEffectList("income")}
-            </section>
-            <section>
-              <h3>世代別の短期効果</h3>
-              ${SegmentEffectList("generation")}
-            </section>
-            <section>
-              <h3>産業別の短期効果</h3>
-              ${SegmentEffectList("industry")}
-            </section>
+            ${ResultEffectContent(activeResultEffectAxis)}
           </div>
         </article>
         ${NationalRelationPanel()}
@@ -3368,6 +3431,30 @@ function bindInteractions() {
       App(appData);
     });
   });
+  document.querySelectorAll("[data-dashboard-analysis]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      activeDashboardAnalysis = event.currentTarget.dataset.dashboardAnalysis;
+      App(appData);
+    });
+  });
+  document.querySelectorAll("[data-voice-effect-axis]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      activeVoiceEffectAxis = event.currentTarget.dataset.voiceEffectAxis;
+      App(appData);
+    });
+  });
+  document.querySelectorAll("[data-policy-effect-axis]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      activePolicyEffectAxis = event.currentTarget.dataset.policyEffectAxis;
+      App(appData);
+    });
+  });
+  document.querySelectorAll("[data-result-effect-axis]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      activeResultEffectAxis = event.currentTarget.dataset.resultEffectAxis;
+      App(appData);
+    });
+  });
   document.querySelector("#save-settings")?.addEventListener("click", (event) => {
     event.preventDefault();
     document.querySelector("#save-modal").hidden = false;
@@ -3537,6 +3624,7 @@ function bindInteractions() {
       const result = await discussIssueSelection(text);
       appData.issueSelectionChat.messages.push({ role: "assistant", text: result.message });
       appData.issueSelectionChat.selectedIssueId = result.recommendedIssueIds?.[0] || appData.issueSelectionChat.selectedIssueId;
+      resetPolicyDrivenViews(selectedPolicyTarget());
     } finally {
       App(appData);
     }
@@ -3548,6 +3636,7 @@ function bindInteractions() {
       if (!issue) return;
 
       appData.issueSelectionChat.selectedIssueId = issue.id;
+      resetPolicyDrivenViews((appData.policyTargets || []).find((target) => target.id === issue.id) || issue);
       appData.issueSelectionChat.messages.push({ role: "user", text: `課題「${issue.title}」を選択しました。内容を詳しく説明してください。` });
       const loadingMessageIndex = appData.issueSelectionChat.messages.push({ role: "assistant", text: `「${issue.title}」の背景と関連指標を分析しています。` }) - 1;
       App(appData);
@@ -3555,6 +3644,7 @@ function bindInteractions() {
         const result = await explainIssueSelection(issue);
         appData.issueSelectionChat.messages[loadingMessageIndex] = { role: "assistant", text: result.message };
         appData.issueSelectionChat.selectedIssueId = result.recommendedIssueIds?.[0] || issue.id;
+        resetPolicyDrivenViews(selectedPolicyTarget());
       } finally {
         App(appData);
       }

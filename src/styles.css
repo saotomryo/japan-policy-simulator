@@ -1051,7 +1051,9 @@ button:disabled {
 
 .chart-tabs {
   display: inline-flex;
+  flex-wrap: wrap;
   width: fit-content;
+  max-width: 100%;
   gap: 4px;
   padding: 4px;
   border: 1px solid var(--border);
