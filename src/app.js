@@ -2065,7 +2065,10 @@ function dashboardMetricsFor(view) {
     digital_access: ["implementation"],
   };
   if (view === "all") return appData.metrics;
-  if (view === "related") return appData.metrics.filter((metric) => targetMetricIds.includes(metric.id) || metric.visible);
+  if (view === "related") {
+    const relatedMetrics = targetMetricIds.map((id) => appData.metrics.find((metric) => metric.id === id)).filter(Boolean);
+    return relatedMetrics.length ? relatedMetrics : appData.metrics.filter((metric) => metric.visible);
+  }
   const allowedCategories = categories[view] || [];
   const categoryMetrics = appData.metrics.filter((metric) => allowedCategories.includes(metric.category));
   return categoryMetrics.length ? categoryMetrics : appData.metrics.filter((metric) => targetMetricIds.includes(metric.id));
@@ -2075,21 +2078,101 @@ function MetricDetailList(view = activeDashboardAnalysis) {
   const metrics = dashboardMetricsFor(view);
   if (!metrics.length) return `<div class="empty-note">この政策では、${effectAxisTitle(view)}に対応する指標はまだ生成されていません。</div>`;
   return `
-    <div class="metric-detail-list">
+    <div class="metric-table">
       ${metrics
-        .slice(0, 10)
+        .slice(0, 6)
         .map(
           (metric) => `
-            <div class="metric-detail-row ${metricTone(metric)}">
-              <strong>${metric.label}</strong>
-              <span>${metric.value}${metric.unit || ""}</span>
-              <small>${SourceTypeLabel(metric.sourceType)} / ${metric.baseYear || appData.scenario.baseYear || "-"}</small>
-              <p>${metric.description || ""}</p>
+            <div class="metric-row ${metricTone(metric)}">
+              <span>${metric.label}</span>
+              <div class="bar ${metricTone(metric) === "risk" ? "danger" : metricTone(metric) === "warn" ? "warning" : ""}">
+                <i style="width:${Math.max(4, Math.min(100, Number(metric.value) || 0))}%"></i>
+              </div>
+              <strong>${metric.value}${metric.unit || ""}</strong>
+              <em>${SourceTypeLabel(metric.sourceType)}</em>
             </div>
           `,
         )
         .join("")}
     </div>
+  `;
+}
+
+function metricById(id) {
+  return [...appData.metrics, ...appData.financeMetrics].find((metric) => metric.id === id);
+}
+
+function NationalSummaryGrid() {
+  const items = [
+    metricById("happiness"),
+    metricById("rule"),
+    metricById("fiscalCapacity"),
+    metricById("externalReputation"),
+  ].filter(Boolean);
+  return `
+    <div class="summary-grid">
+      ${items
+        .map(
+          (metric) => `
+            <article class="summary-panel ${metricTone(metric)}">
+              <span class="metric-label">${metric.label}</span>
+              <strong>${metric.value}${metric.unit || ""}</strong>
+              <small>${SourceTypeLabel(metric.sourceType)} / ${metric.unit || "score"}</small>
+            </article>
+          `,
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function segmentRatio(axis, id) {
+  return appData.populationSegments?.find((segment) => segment.axis === axis && segment.id === id)?.ratio || 0;
+}
+
+function PopulationSummaryPanel() {
+  const age18to29 = segmentRatio("generation", "age_18_29");
+  const age30to49 = segmentRatio("generation", "age_30_49");
+  const age50to64 = segmentRatio("generation", "age_50_64");
+  const age65Plus = segmentRatio("generation", "age_65_plus");
+  const incomeLow = segmentRatio("income", "income_low");
+  const incomeMiddle = segmentRatio("income", "income_middle");
+  const incomeHigh = segmentRatio("income", "income_high");
+  return `
+    <article class="panel population-panel">
+      <div class="panel-head">
+        <h3>人口構成サマリー</h3>
+      </div>
+      <div class="stack-list">
+        <div class="stack-item">
+          <span>世代構成</span>
+          <div class="stacked-bar" aria-hidden="true">
+            <i style="width:${age18to29}%; background:#3b82f6"></i>
+            <i style="width:${age30to49}%; background:#14b8a6"></i>
+            <i style="width:${age50to64}%; background:#f59e0b"></i>
+            <i style="width:${age65Plus}%; background:#64748b"></i>
+          </div>
+          <small>18-29歳 ${age18to29} / 30-49歳 ${age30to49} / 50-64歳 ${age50to64} / 65歳以上 ${age65Plus}</small>
+        </div>
+        <div class="stack-item">
+          <span>所得階層</span>
+          <div class="stacked-bar" aria-hidden="true">
+            <i style="width:${incomeLow}%; background:#ef4444"></i>
+            <i style="width:${incomeMiddle}%; background:#22c55e"></i>
+            <i style="width:${incomeHigh}%; background:#2563eb"></i>
+          </div>
+          <small>低 ${incomeLow} / 中 ${incomeMiddle} / 高 ${incomeHigh}</small>
+        </div>
+        <div class="stack-item">
+          <span>地域構成</span>
+          <div class="stacked-bar" aria-hidden="true">
+            <i style="width:61%; background:#0ea5e9"></i>
+            <i style="width:39%; background:#84cc16"></i>
+          </div>
+          <small>都市 61 / 地方 39</small>
+        </div>
+      </div>
+    </article>
   `;
 }
 
@@ -2879,39 +2962,26 @@ function PolicyHistoryCard(record, index) {
 function DashboardView() {
   if (isNationalScenario()) {
     return `
-      ${SimpleDashboard()}
-      <section class="overview-grid national-overview">
-        <article class="panel trend-panel">
-          <div class="panel-header">
-            <div>
-              <span class="section-label">政策関連指標</span>
-              <h2>選択政策に関連する指標</h2>
-            </div>
-            <small>relatedMetricIds</small>
+      <section class="national-dashboard-view">
+        <div class="section-head">
+          <div>
+            <h2>ダッシュボード</h2>
+            <p>政策を決める前に、日本の初期状態とシミュレーション前提を確認します。</p>
           </div>
-          ${AnalysisViewTabs(activeDashboardAnalysis)}
-          ${MetricDetailList(activeDashboardAnalysis)}
-        </article>
-        <article class="panel sentiment-panel">
-          <div class="panel-header">
-            <div>
-              <span class="section-label">人口・属性</span>
-              <h2>国民属性の反応分布</h2>
+          <button class="primary-button" type="button" data-jump-view="issues">政策ターゲットへ進む</button>
+        </div>
+        ${NationalSummaryGrid()}
+        <div class="dashboard-layout">
+          <article class="panel wide-panel">
+            <div class="panel-head">
+              <h3>政策関連指標</h3>
+              ${AnalysisViewTabs(activeDashboardAnalysis)}
             </div>
-          </div>
-          ${SentimentRows()}
-        </article>
-        <article class="panel trend-panel">
-          <div class="panel-header">
-            <div>
-              <span class="section-label">推移</span>
-              <h2>政策納得度・生活満足度・公平感</h2>
-            </div>
-          </div>
-          ${LineChart()}
-          <div class="legend"><span class="support">政策納得度</span><span class="happiness">生活満足度</span><span class="fairness">世代間公平感</span></div>
-        </article>
-        ${HiddenScorePanel()}
+            <p class="panel-note">表示中の指標は、選択政策の relatedMetricIds と選択中の分析ビューから自動で優先表示します。</p>
+            ${MetricDetailList(activeDashboardAnalysis)}
+          </article>
+          ${PopulationSummaryPanel()}
+        </div>
         ${NationalRelationPanel()}
       </section>
     `;
@@ -3518,6 +3588,12 @@ function bindInteractions() {
   document.querySelectorAll("[data-result-effect-axis]").forEach((button) => {
     button.addEventListener("click", (event) => {
       activeResultEffectAxis = event.currentTarget.dataset.resultEffectAxis;
+      App(appData);
+    });
+  });
+  document.querySelectorAll("[data-jump-view]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      activeView = event.currentTarget.dataset.jumpView;
       App(appData);
     });
   });
