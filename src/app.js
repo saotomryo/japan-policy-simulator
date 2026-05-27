@@ -18,20 +18,20 @@ const providerPresets = {
 };
 
 function loadStoredAiConfig() {
-  const stored = JSON.parse(localStorage.getItem("school-sim-ai-config") || "{}");
+  const stored = JSON.parse(localStorage.getItem("national-policy-ai-config") || localStorage.getItem("school-sim-ai-config") || "{}");
   const preset = providerPresets[stored.provider] || providerPresets.sample;
   return {
     provider: stored.provider || "sample",
     baseUrl: stored.baseUrl || preset.baseUrl,
     model: stored.model || preset.model,
-    apiKey: sessionStorage.getItem("school-sim-ai-key") || "",
+    apiKey: sessionStorage.getItem("national-policy-ai-key") || sessionStorage.getItem("school-sim-ai-key") || "",
   };
 }
 
 let aiConfig = loadStoredAiConfig();
 
 const saveDb = {
-  name: "school-democracy-simulator",
+  name: "national-policy-simulator",
   version: 1,
   store: "saveFiles",
   defaultId: "default",
@@ -258,29 +258,42 @@ function buildPolicySnapshot(data) {
   return data.policy ? JSON.parse(JSON.stringify(data.policy)) : null;
 }
 
+function deepClone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
 function buildEventLogForSave(memory, data, exportedAt) {
   const issueChatEvent = {
     id: "event_issue_chat_current",
     turnId: `year${currentTurn(data).year}-term${currentTurn(data).term}`,
     type: "issue_chat",
     createdAt: exportedAt,
-    summary: "保存時点の課題選択チャット履歴",
+    summary: isNationalScenario(data) ? "保存時点の政策ターゲットチャット履歴" : "保存時点の課題選択チャット履歴",
     payload: { issueSelectionChat: buildIssueSelectionChatSnapshot(data) },
   };
   return [...memory.eventLog.filter((event) => event.id !== issueChatEvent.id), issueChatEvent];
 }
 
+function assertSaveFileHasNoSecrets(saveFile) {
+  const serialized = JSON.stringify(saveFile);
+  if (/apiKey|authorization|bearer|codex/i.test(serialized)) {
+    throw new Error("保存データに認証情報らしき文字列が含まれています");
+  }
+}
+
 function buildSaveFile(data) {
   const visibleMetrics = mapMetrics(data.metrics.filter((metric) => metric.visible));
+  const allMetrics = mapMetrics(data.metrics);
   const hiddenScores = currentHiddenScores(data);
   const finance = mapFinance(data.financeMetrics);
   const memory = getMemory(data);
   const now = new Date().toISOString();
 
-  return {
+  const saveFile = {
     schemaVersion: "1.0.0",
     app: {
       scenarioId: data.scenario.id,
+      stateType: isNationalScenario(data) ? "national-policy-simulation-state" : "school-simulation-state",
       exportedAt: now,
       appVersion: "0.1.0",
     },
@@ -288,18 +301,30 @@ function buildSaveFile(data) {
       year: currentTurn(data).year,
       term: currentTurn(data).term,
       seed: data.scenario.seed,
+      baseYear: data.scenario.baseYear || null,
+      status: data.scenario.status || null,
       visibleMetrics,
+      allMetrics,
       hiddenScores,
       finance,
-      seasonalEvents: data.seasonalEvents || [],
-      voices: data.voices,
-      voiceAnalysis: data.voiceAnalysis,
-      issues: data.issues,
+      metrics: deepClone(data.metrics),
+      financeMetrics: deepClone(data.financeMetrics),
+      seasonalEvents: deepClone(data.seasonalEvents || []),
+      voices: deepClone(data.voices),
+      voiceAnalysis: deepClone(data.voiceAnalysis),
+      issues: deepClone(data.issues),
+      policyTargets: deepClone(data.policyTargets || []),
       selectedIssueId: data.issueSelectionChat.selectedIssueId || null,
+      selectedPolicyTargetId: data.issueSelectionChat.selectedIssueId || null,
       issueSelectionChat: buildIssueSelectionChatSnapshot(data),
       policyDraft: buildPolicySnapshot(data),
       policyChat: buildPolicyChatSnapshot(data),
       activePolicyDraftId: data.policy?.title ? "current_policy" : null,
+      populationSegments: deepClone(data.populationSegments || []),
+      internationalRelations: deepClone(data.internationalRelations || []),
+      segmentEffects: deepClone(data.segmentEffects || {}),
+      lastSimulationResult: deepClone(data.lastSimulationResult || null),
+      hiddenScoreValues: deepClone(data.hiddenScoreValues || {}),
     },
     timeline: memory.timeline,
     eventLog: buildEventLogForSave(memory, data, now),
@@ -307,6 +332,8 @@ function buildSaveFile(data) {
     memorySummary: memory.memorySummary,
     annualReport: data.annualReport || null,
   };
+  assertSaveFileHasNoSecrets(saveFile);
+  return saveFile;
 }
 
 function validateSaveFile(saveFile) {
@@ -324,7 +351,8 @@ function validateSaveFile(saveFile) {
 async function saveToBrowserCache() {
   const saveFile = buildSaveFile(appData);
   await withSaveStore("readwrite", (store) => store.put({ id: saveDb.defaultId, saveFile, updatedAt: saveFile.app.exportedAt }));
-  localStorage.setItem("school-sim-last-save-id", saveDb.defaultId);
+  localStorage.setItem("national-policy-last-save-id", saveDb.defaultId);
+  localStorage.removeItem("school-sim-last-save-id");
   saveStatus = `ブラウザ保存済み ${new Date(saveFile.app.exportedAt).toLocaleString("ja-JP")}`;
   App(appData);
 }
@@ -341,6 +369,7 @@ async function loadFromBrowserCache() {
 
 async function clearBrowserCache() {
   await withSaveStore("readwrite", (store) => store.delete(saveDb.defaultId));
+  localStorage.removeItem("national-policy-last-save-id");
   localStorage.removeItem("school-sim-last-save-id");
   saveStatus = "ブラウザ保存を削除しました";
   App(appData);
@@ -352,7 +381,7 @@ function exportSaveFile() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `school-simulator-${saveFile.app.exportedAt.slice(0, 10)}.json`;
+  link.download = `${isNationalScenario() ? "national-policy-simulator" : "school-simulator"}-${saveFile.app.exportedAt.slice(0, 10)}.json`;
   link.click();
   URL.revokeObjectURL(url);
   saveStatus = "JSONを書き出しました";
@@ -361,24 +390,40 @@ function exportSaveFile() {
 
 function applySaveFile(saveFile) {
   validateSaveFile(saveFile);
+  if (saveFile.app?.scenarioId) {
+    appData.scenario.id = saveFile.app.scenarioId;
+  }
   if (saveFile.currentState?.year && saveFile.currentState?.term) {
     appData.turn = { year: saveFile.currentState.year, term: saveFile.currentState.term };
     appData.scenario.termLabel = termLabel(appData.turn);
   }
+  if (saveFile.currentState?.baseYear) {
+    appData.scenario.baseYear = saveFile.currentState.baseYear;
+  }
+  if (saveFile.currentState?.status) {
+    appData.scenario.status = saveFile.currentState.status;
+  }
   const latestTimeline = saveFile.timeline.at(-1);
-  if (latestTimeline?.endSnapshot?.visibleMetrics) {
+  const metricSnapshot = saveFile.currentState?.allMetrics || latestTimeline?.endSnapshot?.allMetrics || latestTimeline?.endSnapshot?.visibleMetrics;
+  if (metricSnapshot) {
     appData.metrics = appData.metrics.map((metric) => ({
       ...metric,
-      value: latestTimeline.endSnapshot.visibleMetrics[metric.id] ?? metric.value,
-      delta: latestTimeline.metricDeltas?.[metric.id] ?? metric.delta,
+      value: metricSnapshot[metric.id] ?? metric.value,
+      delta: latestTimeline?.metricDeltas?.[metric.id] ?? metric.delta,
     }));
+  }
+  if (saveFile.currentState?.metrics) {
+    appData.metrics = saveFile.currentState.metrics;
   }
   if (latestTimeline?.endSnapshot?.finance) {
     appData.financeMetrics = appData.financeMetrics.map((metric) => ({
       ...metric,
       value: latestTimeline.endSnapshot.finance[metric.id] ?? metric.value,
-      delta: latestTimeline.financeDelta?.[metric.id] ?? metric.delta,
+      delta: latestTimeline?.financeDelta?.[metric.id] ?? metric.delta,
     }));
+  }
+  if (saveFile.currentState?.financeMetrics) {
+    appData.financeMetrics = saveFile.currentState.financeMetrics;
   }
   if (saveFile.currentState?.voices) {
     appData.voices = saveFile.currentState.voices;
@@ -389,11 +434,29 @@ function applySaveFile(saveFile) {
   if (saveFile.currentState?.issues) {
     appData.issues = saveFile.currentState.issues;
   }
+  if (saveFile.currentState?.policyTargets) {
+    appData.policyTargets = saveFile.currentState.policyTargets;
+  }
+  if (saveFile.currentState?.populationSegments) {
+    appData.populationSegments = saveFile.currentState.populationSegments;
+  }
+  if (saveFile.currentState?.internationalRelations) {
+    appData.internationalRelations = saveFile.currentState.internationalRelations;
+  }
+  if (saveFile.currentState?.segmentEffects) {
+    appData.segmentEffects = saveFile.currentState.segmentEffects;
+  }
+  if ("lastSimulationResult" in (saveFile.currentState || {})) {
+    appData.lastSimulationResult = saveFile.currentState.lastSimulationResult;
+  }
+  if (saveFile.currentState?.hiddenScoreValues) {
+    appData.hiddenScoreValues = saveFile.currentState.hiddenScoreValues;
+  }
   if (saveFile.currentState?.seasonalEvents) {
     appData.seasonalEvents = saveFile.currentState.seasonalEvents;
   }
-  if (saveFile.currentState?.selectedIssueId) {
-    appData.issueSelectionChat.selectedIssueId = saveFile.currentState.selectedIssueId;
+  if (saveFile.currentState?.selectedPolicyTargetId || saveFile.currentState?.selectedIssueId) {
+    appData.issueSelectionChat.selectedIssueId = saveFile.currentState.selectedPolicyTargetId || saveFile.currentState.selectedIssueId;
   }
   const savedIssueChat =
     saveFile.currentState?.issueSelectionChat ||
@@ -404,7 +467,7 @@ function applySaveFile(saveFile) {
   if (savedIssueChat?.messages?.length) {
     appData.issueSelectionChat = {
       title: savedIssueChat.title || "課題選択チャット",
-      selectedIssueId: savedIssueChat.selectedIssueId || saveFile.currentState?.selectedIssueId || null,
+      selectedIssueId: savedIssueChat.selectedIssueId || saveFile.currentState?.selectedPolicyTargetId || saveFile.currentState?.selectedIssueId || null,
       messages: savedIssueChat.messages,
     };
   }
@@ -458,18 +521,21 @@ function saveAiConfig(formData) {
     apiKey: formData.get("apiKey") || "",
   };
   if (aiConfig.apiKey) {
-    sessionStorage.setItem("school-sim-ai-key", aiConfig.apiKey);
+    sessionStorage.setItem("national-policy-ai-key", aiConfig.apiKey);
+    sessionStorage.removeItem("school-sim-ai-key");
   } else {
+    sessionStorage.removeItem("national-policy-ai-key");
     sessionStorage.removeItem("school-sim-ai-key");
   }
   localStorage.setItem(
-    "school-sim-ai-config",
+    "national-policy-ai-config",
     JSON.stringify({
       provider: aiConfig.provider,
       baseUrl: aiConfig.baseUrl,
       model: aiConfig.model,
     }),
   );
+  localStorage.removeItem("school-sim-ai-config");
   aiNotice = "";
 }
 
@@ -3378,7 +3444,7 @@ function SaveModal() {
           </div>
           <button id="save-close" type="button">閉じる</button>
         </div>
-        <p>DBは使わず、ブラウザ内キャッシュとJSONファイルでシミュレーション状態を保持します。APIキーやCodex認証情報は保存データに含めません。</p>
+        <p>ブラウザ内保存とJSONファイルで国版シミュレーション状態を保持します。APIキーやCodex認証情報は保存データに含めません。</p>
         <div class="memory-summary-grid">
           <div><strong>${timelineCount}</strong><span>${isNationalScenario() ? "政策スナップショット" : "学期スナップショット"}</span></div>
           <div><strong>${eventCount}</strong><span>イベントログ</span></div>
@@ -3568,7 +3634,9 @@ function bindInteractions() {
     document.querySelector("#ai-settings-modal").hidden = true;
   });
   document.querySelector("#ai-settings-clear")?.addEventListener("click", () => {
+    sessionStorage.removeItem("national-policy-ai-key");
     sessionStorage.removeItem("school-sim-ai-key");
+    localStorage.removeItem("national-policy-ai-config");
     localStorage.removeItem("school-sim-ai-config");
     aiConfig.apiKey = "";
     aiConfig.provider = "sample";
@@ -3585,15 +3653,17 @@ function bindInteractions() {
       model: preset.model,
       apiKey: "",
     };
+    sessionStorage.removeItem("national-policy-ai-key");
     sessionStorage.removeItem("school-sim-ai-key");
     localStorage.setItem(
-      "school-sim-ai-config",
+      "national-policy-ai-config",
       JSON.stringify({
         provider: aiConfig.provider,
         baseUrl: aiConfig.baseUrl,
         model: aiConfig.model,
       }),
     );
+    localStorage.removeItem("school-sim-ai-config");
     aiNotice = "";
     App(appData);
   });
