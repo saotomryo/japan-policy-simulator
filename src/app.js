@@ -90,6 +90,7 @@ function prepareInitialNationalFlow(data) {
   if (data?.scenario?.id !== "national") return data;
   return {
     ...data,
+    targetMockData: buildInitialTargetMockData(data),
     voices: [],
     voiceAnalysis: null,
     issueSelectionChat: {
@@ -116,6 +117,22 @@ function prepareInitialNationalFlow(data) {
     memory: null,
     hiddenScoreValues: {},
     annualReport: null,
+  };
+}
+
+function buildInitialTargetMockData(data) {
+  const targetId = data.issueSelectionChat?.selectedIssueId;
+  if (!targetId) return {};
+  const hasPreparedMock = data.voices?.length || data.voiceAnalysis || data.policy?.effects?.length;
+  if (!hasPreparedMock) return {};
+  return {
+    [targetId]: deepClone({
+      voices: data.voices || [],
+      voiceAnalysis: data.voiceAnalysis || null,
+      policy: data.policy || emptyPolicyDraft(),
+      policyChat: data.policyChat || null,
+      segmentEffects: data.segmentEffects || {},
+    }),
   };
 }
 
@@ -372,6 +389,7 @@ function buildSaveFile(data) {
       voiceAnalysis: deepClone(data.voiceAnalysis),
       issues: deepClone(data.issues),
       policyTargets: deepClone(data.policyTargets || []),
+      targetMockData: deepClone(data.targetMockData || {}),
       selectedIssueId: data.issueSelectionChat.selectedIssueId || null,
       selectedPolicyTargetId: data.issueSelectionChat.selectedIssueId || null,
       issueSelectionChat: buildIssueSelectionChatSnapshot(data),
@@ -494,6 +512,9 @@ function applySaveFile(saveFile) {
   }
   if (saveFile.currentState?.policyTargets) {
     appData.policyTargets = saveFile.currentState.policyTargets;
+  }
+  if (saveFile.currentState?.targetMockData) {
+    appData.targetMockData = saveFile.currentState.targetMockData;
   }
   if (saveFile.currentState?.populationSegments) {
     appData.populationSegments = saveFile.currentState.populationSegments;
@@ -2364,6 +2385,19 @@ function sampleNationalPolicyDraft(policyTarget = selectedPolicyTarget()) {
   };
 }
 
+function applyPreparedTargetMock(policyTarget) {
+  const prepared = appData.targetMockData?.[policyTarget?.id];
+  if (!prepared) return false;
+  appData.voices = deepClone(prepared.voices || []);
+  appData.voiceAnalysis = deepClone(prepared.voiceAnalysis || null);
+  appData.segmentEffects = deepClone(prepared.segmentEffects || appData.segmentEffects || {});
+  applyPolicyDraft(deepClone(prepared.policy || emptyPolicyDraft()), { resetChat: true });
+  if (prepared.policyChat?.messages?.length) {
+    appData.policyChat = deepClone(prepared.policyChat);
+  }
+  return true;
+}
+
 function generatePolicyTargetInitialData() {
   const policyTarget = selectedPolicyTarget();
   if (!policyTarget) {
@@ -2371,14 +2405,17 @@ function generatePolicyTargetInitialData() {
     App(appData);
     return;
   }
-  appData.voices = sampleNationalVoices(policyTarget);
-  appData.voiceAnalysis = sampleNationalVoiceAnalysis(policyTarget, appData.voices);
-  applyPolicyDraft(sampleNationalPolicyDraft(policyTarget), { resetChat: true });
+  const usedPreparedMock = applyPreparedTargetMock(policyTarget);
+  if (!usedPreparedMock) {
+    appData.voices = sampleNationalVoices(policyTarget);
+    appData.voiceAnalysis = sampleNationalVoiceAnalysis(policyTarget, appData.voices);
+    applyPolicyDraft(sampleNationalPolicyDraft(policyTarget), { resetChat: true });
+  }
   appData.issueSelectionChat.messages.push({
     role: "assistant",
-    text: `「${policyTarget.title}」について仮想の国民・ステークホルダーの声と初期政策案を生成しました。声の分析画面でクラスターを確認できます。`,
+    text: `「${policyTarget.title}」について${usedPreparedMock ? "用意済みモックデータ" : "仮想の国民・ステークホルダーの声と初期政策案"}を生成しました。声の分析画面でクラスターを確認できます。`,
   });
-  saveStatus = "声の分析と初期政策案を生成しました";
+  saveStatus = usedPreparedMock ? "用意済みモックデータで声の分析と初期政策案を生成しました" : "声の分析と初期政策案を生成しました";
   activeView = "voices";
   App(appData);
 }
