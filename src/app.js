@@ -9,6 +9,7 @@ let activeDashboardAnalysis = "related";
 let activeVoiceEffectAxis = "income";
 let activePolicyEffectAxis = "income";
 let activeResultEffectAxis = "related";
+let activePolicyPanel = "cost";
 
 const providerPresets = {
   sample: { label: "固定サンプル", baseUrl: "", model: "sample" },
@@ -1994,6 +1995,7 @@ function resetPolicyDrivenViews(policyTarget = selectedPolicyTarget()) {
   activeVoiceEffectAxis = axis;
   activePolicyEffectAxis = axis;
   activeResultEffectAxis = "related";
+  activePolicyPanel = "cost";
 }
 
 function SourceTypeLabel(sourceType) {
@@ -2797,23 +2799,13 @@ function PolicyPreview() {
         <span>予算</span>
       </div>
       <div class="finance-note">${isNationalScenario() ? "短期財源使用" : "キャッシュ使用"}: ${policy.cashUse}</div>
-      ${isNationalScenario() && hasDraft ? PolicyCostBreakdown(policy) : ""}
-      ${hasDraft ? PolicyDetailSections(policy) : ""}
       ${
-        isNationalScenario()
-          ? `${EffectAxisTabs(activePolicyEffectAxis, "policyEffectAxis")}
-            <div class="policy-target-meta">
-              <div><strong>表示中の効果軸</strong><span>${effectAxisTitle(activePolicyEffectAxis)}</span></div>
-              <div><strong>想定効果</strong><span>${(appData.segmentEffects?.[activePolicyEffectAxis] || []).map((effect) => `${effect.segmentLabel}: ${effect.effectScore ?? "N/A"}`).join(" / ") || "この軸は該当性が低いか、まだ生成されていません。"}</span></div>
-              <div><strong>長期影響</strong><span>確定結果ではなく予想として表示</span></div>
-            </div>`
-          : ""
+        isNationalScenario() && hasDraft
+          ? `${PolicyPanelTabs()}${PolicyPanelContent(policy)}`
+          : hasDraft
+            ? PolicyDetailSections(policy)
+            : ""
       }
-      <div class="impact-list">
-        ${policy.effects
-          .map((effect) => `<span class="${effect.tone}">${effect.label} ${effect.value > 0 ? "+" : ""}${effect.value}</span>`)
-          .join("")}
-      </div>
       ${
         hasDraft && !policyExecuted
           ? `<button id="execute-policy" class="primary" type="button">${isNationalScenario() ? "政策を実行して結果を見る" : "施策を実行して結果を見る"}</button>`
@@ -2825,6 +2817,63 @@ function PolicyPreview() {
       ${!isNationalScenario() && canCreateAnnual ? `<button class="create-annual-report primary" type="button">年度末レポートを作成</button>` : ""}
       ${!isNationalScenario() && appData.annualReport ? `<div class="turn-complete-note">年度末レポート作成済みです。</div>` : ""}
     </article>
+  `;
+}
+
+function PolicyPanelTabs() {
+  const tabs = [
+    ["cost", "コスト"],
+    ["implementation", "実施内容"],
+    ["effects", "効果"],
+    ["groups", "対象属性"],
+  ];
+  return `
+    <div class="policy-panel-tabs" role="tablist" aria-label="政策案の表示切替">
+      ${tabs.map(([id, label]) => `<button class="${activePolicyPanel === id ? "active" : ""}" type="button" data-policy-panel="${id}">${label}</button>`).join("")}
+    </div>
+  `;
+}
+
+function PolicyPanelContent(policy) {
+  const panels = {
+    cost: PolicyCostBreakdown(policy),
+    implementation: PolicyImplementationSections(policy),
+    effects: PolicyEffectPanel(policy),
+    groups: PolicyGroupSections(policy),
+  };
+  return `<div class="policy-panel-content">${panels[activePolicyPanel] || panels.cost}</div>`;
+}
+
+function PolicyImplementationSections(policy) {
+  return `
+    <div class="policy-detail-grid">
+      ${PolicyListSection("実施内容", policy.implementationDetails)}
+      ${PolicyListSection("想定する効果", policy.expectedEffects)}
+      ${PolicyListSection("懸念点", policy.concerns)}
+    </div>
+  `;
+}
+
+function PolicyEffectPanel(policy) {
+  return `
+    ${EffectAxisTabs(activePolicyEffectAxis, "policyEffectAxis")}
+    <div class="policy-target-meta">
+      <div><strong>表示中の効果軸</strong><span>${effectAxisTitle(activePolicyEffectAxis)}</span></div>
+      <div><strong>想定効果</strong><span>${(appData.segmentEffects?.[activePolicyEffectAxis] || []).map((effect) => `${effect.segmentLabel}: ${effect.effectScore ?? "N/A"}`).join(" / ") || "この軸は該当性が低いか、まだ生成されていません。"}</span></div>
+      <div><strong>長期影響</strong><span>確定結果ではなく予想として表示</span></div>
+    </div>
+    <div class="impact-list">
+      ${policy.effects.map((effect) => `<span class="${effect.tone}">${effect.label} ${effect.value > 0 ? "+" : ""}${effect.value}</span>`).join("")}
+    </div>
+  `;
+}
+
+function PolicyGroupSections(policy) {
+  return `
+    <div class="policy-group-grid">
+      ${PolicyGroupSection("メリットを享受する対象属性", policy.beneficiaryGroups, "good")}
+      ${PolicyGroupSection("メリットが薄い・ややデメリットになる対象属性", policy.lowBenefitGroups, "warn")}
+    </div>
   `;
 }
 
@@ -2867,7 +2916,7 @@ function PolicyCostBreakdown(policy) {
 
 function CostBreakdownItem(item) {
   return `
-    <details class="cost-breakdown-item" open>
+    <details class="cost-breakdown-item">
       <summary>
         <span>
           <strong>${item.label}</strong>
@@ -3657,6 +3706,12 @@ function bindInteractions() {
   document.querySelectorAll("[data-policy-effect-axis]").forEach((button) => {
     button.addEventListener("click", (event) => {
       activePolicyEffectAxis = event.currentTarget.dataset.policyEffectAxis;
+      App(appData);
+    });
+  });
+  document.querySelectorAll("[data-policy-panel]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      activePolicyPanel = event.currentTarget.dataset.policyPanel;
       App(appData);
     });
   });

@@ -1642,6 +1642,34 @@ button:disabled {
   font-weight: 900;
 }
 
+.policy-panel-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.policy-panel-tabs button {
+  min-height: 38px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.policy-panel-tabs button.active {
+  background: var(--brand);
+  color: #fff;
+}
+
+.policy-panel-content {
+  min-height: 360px;
+}
+
 .policy-cost-panel {
   display: grid;
   gap: 14px;
@@ -2215,6 +2243,10 @@ button:disabled {
 
   .chat-input-preview {
     grid-template-columns: 1fr;
+  }
+
+  .policy-panel-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .cost-summary-grid,
