@@ -934,6 +934,16 @@ button:disabled {
   font-weight: 800;
 }
 
+.panel-header-action {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+}
+
+.panel-header-action small {
+  text-align: right;
+}
+
 .radar {
   width: min(100%, 300px);
   margin: 0 auto;
@@ -1570,22 +1580,6 @@ button:disabled {
   line-height: 1.5;
 }
 
-.target-flow-actions {
-  display: grid;
-  gap: 8px;
-  margin: 14px 0;
-  padding: 12px;
-  border: 1px solid rgba(15, 124, 128, 0.2);
-  border-radius: 10px;
-  background: #f3fbfb;
-}
-
-.target-flow-actions small {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 800;
-}
-
 .workflow-empty {
   align-content: start;
 }
@@ -1603,6 +1597,27 @@ button:disabled {
   display: grid;
   gap: 16px;
   padding: 16px;
+}
+
+.policy-preview-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.policy-preview-header > div {
+  min-width: 0;
+}
+
+.policy-preview-header .primary-button,
+.policy-preview-header .turn-complete-note {
+  flex: 0 0 auto;
+}
+
+.turn-complete-note.compact {
+  padding: 10px 12px;
+  white-space: nowrap;
 }
 
 .issue-chat-panel {
@@ -2311,6 +2326,19 @@ button:disabled {
 
   .section-head {
     display: grid;
+  }
+
+  .panel-header,
+  .policy-preview-header {
+    display: grid;
+  }
+
+  .panel-header-action {
+    justify-items: stretch;
+  }
+
+  .panel-header-action small {
+    text-align: left;
   }
 
   .primary-button {
