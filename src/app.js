@@ -12,6 +12,7 @@ let activeResultEffectAxis = "related";
 let activePolicyPanel = "cost";
 let activeFreePolicyScale = "standard";
 let freePolicyDraftText = "";
+const showLongTermResultSection = false;
 
 const providerPresets = {
   sample: { label: "固定サンプル", baseUrl: "", model: "sample" },
@@ -1378,7 +1379,7 @@ function samplePolicySimulationResult() {
   if (isNationalScenario()) {
     const cashUse = appData.policy.cashUse || 0;
     return {
-      summary: `${appData.policy.title}により、短期的には家計負担感と政策納得度が改善した。一方で、財源補填と社会保障持続性への懸念は長期予想として残る。`,
+      summary: `${appData.policy.title}により、短期的には家計負担感と政策納得度が改善した。一方で、財源補填と社会保障持続性への懸念は今後の検討課題として残る。`,
       visibleMetricDeltas: {
         support: 6,
         happiness: 4,
@@ -2733,7 +2734,7 @@ function resultDetailSections(result = appData.lastSimulationResult) {
     },
     {
       title: "財政・社会保障への副作用",
-      body: "政策実行により短期的な可処分所得は改善しますが、財政余力と社会保障財源には下押し圧力が出ます。ここは確定的な失敗ではなく、補填財源、時限措置の出口、恒久化しない条件をどれだけ明確にできるかで長期予想が変わる領域です。",
+      body: "政策実行により短期的な可処分所得は改善しますが、財政余力と社会保障財源には下押し圧力が出ます。ここは確定的な失敗ではなく、補填財源、時限措置の出口、恒久化しない条件をどれだけ明確にできるかで今後の評価が変わる領域です。",
       entries: fiscalImpact,
     },
     {
@@ -2754,7 +2755,7 @@ function NationalResultReport() {
   if (!result) {
     return `
       <section class="national-result-report">
-        ${EmptyWorkflowPanel("実行結果は未生成", "政策案画面で政策を実行すると、短期結果・長期予想・属性別影響を詳細レポートとして表示します。", "政策案へ進む")}
+        ${EmptyWorkflowPanel("実行結果は未生成", "政策案画面で政策を実行すると、短期結果・属性別影響を詳細レポートとして表示します。", "政策案へ進む")}
       </section>
     `;
   }
@@ -2822,19 +2823,25 @@ function NationalResultReport() {
           .join("")}
       </div>
 
-      <article class="panel">
-        <div class="panel-header">
-          <div>
-            <span class="section-label">長期予想</span>
-            <h2>確定結果ではなく観測対象</h2>
-          </div>
-        </div>
-        <div class="policy-target-meta">
-          <div><strong>長期リスク</strong><span>恒久化した場合、財政余力と社会保障持続性が低下する可能性があります。</span></div>
-          <div><strong>観測すべき指標</strong><span>${(result.nextIssues || []).join("、") || "税収、消費動向、社会保障財源、政策納得度、将来世代への負担感。"}</span></div>
-          <div><strong>変動要因</strong><span>物価、賃金、景気循環、国際的な金融環境、制度終了時の政治圧力。</span></div>
-        </div>
-      </article>
+      ${
+        showLongTermResultSection
+          ? `
+            <article class="panel">
+              <div class="panel-header">
+                <div>
+                  <span class="section-label">長期予想</span>
+                  <h2>確定結果ではなく観測対象</h2>
+                </div>
+              </div>
+              <div class="policy-target-meta">
+                <div><strong>長期リスク</strong><span>恒久化した場合、財政余力と社会保障持続性が低下する可能性があります。</span></div>
+                <div><strong>観測すべき指標</strong><span>${(result.nextIssues || []).join("、") || "税収、消費動向、社会保障財源、政策納得度、将来世代への負担感。"}</span></div>
+                <div><strong>変動要因</strong><span>物価、賃金、景気循環、国際的な金融環境、制度終了時の政治圧力。</span></div>
+              </div>
+            </article>
+          `
+          : ""
+      }
     </section>
   `;
 }
@@ -3940,7 +3947,7 @@ function ResultView() {
         <div class="section-head">
           <div>
             <h2>実行結果</h2>
-            <p>単発政策の短期結果と長期予想を、年度レポート形式で詳しく確認します。</p>
+            <p>単発政策の短期結果と属性別影響を、年度レポート形式で詳しく確認します。</p>
           </div>
           <span class="status-pill">詳細レポート</span>
         </div>
