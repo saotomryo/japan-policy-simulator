@@ -1570,6 +1570,30 @@ button:disabled {
   line-height: 1.5;
 }
 
+.target-flow-actions {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0;
+  padding: 12px;
+  border: 1px solid rgba(15, 124, 128, 0.2);
+  border-radius: 10px;
+  background: #f3fbfb;
+}
+
+.target-flow-actions small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.workflow-empty {
+  align-content: start;
+}
+
+.workflow-empty button {
+  justify-self: start;
+}
+
 .decision-column {
   display: grid;
   gap: 16px;

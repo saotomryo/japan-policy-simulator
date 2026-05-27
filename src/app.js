@@ -61,7 +61,62 @@ async function loadDashboardData() {
   if (!response.ok) {
     throw new Error(`Failed to load dashboard data: ${response.status}`);
   }
-  return response.json();
+  const data = await response.json();
+  return prepareInitialNationalFlow(data);
+}
+
+function emptyPolicyDraft() {
+  return {
+    title: "政策案未生成",
+    summary: "",
+    budget: 0,
+    cashUse: 0,
+    financePlan: "政策ターゲット決定後に生成",
+    covers: [],
+    implementationDetails: [],
+    expectedEffects: [],
+    concerns: [],
+    beneficiaryGroups: [],
+    lowBenefitGroups: [],
+    shortTermEffects: {},
+    longTermEffects: {},
+    risks: [],
+    effects: [],
+    costBreakdown: [],
+  };
+}
+
+function prepareInitialNationalFlow(data) {
+  if (data?.scenario?.id !== "national") return data;
+  return {
+    ...data,
+    voices: [],
+    voiceAnalysis: null,
+    issueSelectionChat: {
+      title: "政策分析チャット",
+      messages: [
+        {
+          role: "assistant",
+          text: "政策ターゲットを選択または自由記述で追加し、「声の分析へ進む」で仮想データと初期政策案を生成します。",
+        },
+      ],
+      selectedIssueId: null,
+    },
+    policy: emptyPolicyDraft(),
+    policyChat: {
+      title: "政策案をチャットで調整",
+      messages: [
+        {
+          role: "assistant",
+          text: "政策ターゲット決定後に、初期政策案を生成してから調整できます。",
+        },
+      ],
+    },
+    lastSimulationResult: null,
+    memory: null,
+    hiddenScoreValues: {},
+    annualReport: null,
+  };
 }
 
 function openSaveDb() {
@@ -904,7 +959,8 @@ async function explainIssueSelection(issue) {
 }
 
 function selectedIssue() {
-  return appData.issues.find((issue) => issue.id === appData.issueSelectionChat.selectedIssueId) || appData.issues[0];
+  const issue = appData.issues.find((candidate) => candidate.id === appData.issueSelectionChat.selectedIssueId);
+  return isNationalScenario() ? issue || null : issue || appData.issues[0];
 }
 
 function groupLabel(groupId) {
@@ -1995,7 +2051,8 @@ function escapeHtml(value = "") {
 
 function selectedPolicyTarget() {
   const selectedId = appData.issueSelectionChat?.selectedIssueId;
-  return (appData.policyTargets || appData.issues || []).find((target) => target.id === selectedId) || (appData.policyTargets || appData.issues || [])[0];
+  const target = (appData.policyTargets || appData.issues || []).find((candidate) => candidate.id === selectedId);
+  return isNationalScenario() ? target || null : target || (appData.policyTargets || appData.issues || [])[0];
 }
 
 function effectAxisFromRecommended(views = []) {
@@ -2050,12 +2107,280 @@ function upsertFreePolicyTarget(policyTarget) {
     ...(appData.issues || []).filter(removeFreeTargets),
   ];
   appData.issueSelectionChat.selectedIssueId = policyTarget.id;
+  clearNationalGeneratedOutputs();
   appData.issueSelectionChat.messages.push({ role: "user", text: `自由記述政策「${policyTarget.title}」を追加しました。` });
   appData.issueSelectionChat.messages.push({
     role: "assistant",
     text: `自由記述を政策ターゲット化しました。関連指標は ${policyTarget.metrics.join(" / ")}、推奨ビューは ${policyTarget.recommendedViews.join(" / ")} です。${policyTarget.fundingNote}`,
   });
   resetPolicyDrivenViews(policyTarget);
+}
+
+function hasNationalAnalysisStarted() {
+  return !isNationalScenario() || Boolean(appData.voiceAnalysis || appData.voices?.length || appData.policy?.effects?.length);
+}
+
+function clearNationalGeneratedOutputs() {
+  if (!isNationalScenario()) return;
+  appData.voices = [];
+  appData.voiceAnalysis = null;
+  appData.policy = emptyPolicyDraft();
+  appData.policyChat = {
+    title: "政策案をチャットで調整",
+    messages: [
+      {
+        role: "assistant",
+        text: "政策ターゲット決定後に、初期政策案を生成してから調整できます。",
+      },
+    ],
+  };
+  appData.lastSimulationResult = null;
+  appData.memory = null;
+}
+
+function sampleNationalVoices(policyTarget) {
+  const title = policyTarget?.title || "この政策";
+  return [
+    {
+      id: "voice_household_support",
+      name: "都市部の40代中間層",
+      group: "中間層・生活防衛志向",
+      mood: "条件付き賛成",
+      text: `${title}で生活費や手続き負担が下がるなら期待したい。ただ、対象が広すぎると本当に困っている層に届くのかは気になる。`,
+      avatar: { slot: "sky", label: "中" },
+    },
+    {
+      id: "voice_fiscal_conservative",
+      name: "財政規律を重視する保守層",
+      group: "保守層・財政規律重視",
+      mood: "慎重",
+      text: `${title}の必要性は分かるが、恒久財源や出口戦略が曖昧なまま進めると将来世代への負担になる。`,
+      avatar: { slot: "rose", label: "財" },
+    },
+    {
+      id: "voice_progressive",
+      name: "都市部のリベラル層",
+      group: "リベラル層・再分配重視",
+      mood: "賛成",
+      text: `${title}は格差や不安に対応する政策として評価できる。所得別・世代別に効果が偏らない設計にしてほしい。`,
+      avatar: { slot: "green", label: "リ" },
+    },
+    {
+      id: "voice_business",
+      name: "製造業の経営者",
+      group: "産業界・実務層",
+      mood: "中立",
+      text: `${title}そのものより、制度変更の準備期間や事務コストが読めるかが重要。業界ごとの差も見て判断したい。`,
+      avatar: { slot: "sky", label: "産" },
+    },
+    {
+      id: "voice_indifferent",
+      name: "政治ニュースをあまり追わない20代",
+      group: "無関心層",
+      mood: "低関心",
+      text: `${title}と言われても、自分の生活にいつ何が起きるのか分かりにくい。説明が簡単なら少しは関心を持てる。`,
+      avatar: { slot: "green", label: "無" },
+    },
+  ];
+}
+
+function sampleNationalVoiceAnalysis(policyTarget, voices) {
+  const title = policyTarget?.title || "対象政策";
+  return {
+    populationSize: 125000000,
+    sampledOpinionCount: 1200,
+    embeddingModel: "national-policy-target-mock",
+    clusters: [
+      {
+        id: "benefit_expectation",
+        label: "生活改善期待",
+        size: 320,
+        sentiment: 0.58,
+        x: 76,
+        y: 72,
+        keywords: ["生活", "負担軽減", "即効性", title],
+        summary: "短期的な生活改善や制度利用のしやすさを評価する層。",
+        representativeVoiceIds: ["voice_household_support", "voice_progressive"],
+      },
+      {
+        id: "fiscal_warning",
+        label: "財源・将来負担懸念",
+        size: 240,
+        sentiment: -0.52,
+        x: 146,
+        y: 134,
+        keywords: ["財源", "将来世代", "恒久化", "出口戦略"],
+        summary: "政策目的よりも財源制約と長期負担を重く見る層。",
+        representativeVoiceIds: ["voice_fiscal_conservative"],
+      },
+      {
+        id: "implementation_cost",
+        label: "実務負荷・業界影響",
+        size: 210,
+        sentiment: -0.08,
+        x: 278,
+        y: 96,
+        keywords: ["事務負担", "制度変更", "産業別", "準備期間"],
+        summary: "業界別の影響や現場実装コストを見て態度を決める層。",
+        representativeVoiceIds: ["voice_business"],
+      },
+      {
+        id: "low_attention",
+        label: "無関心・低理解",
+        size: 190,
+        sentiment: -0.04,
+        x: 326,
+        y: 158,
+        keywords: ["分かりにくい", "実感", "広報", "手続き"],
+        summary: "政策内容よりも説明の分かりやすさと生活実感で反応が変わる層。",
+        representativeVoiceIds: ["voice_indifferent"],
+      },
+    ],
+    distances: [
+      { from: "benefit_expectation", to: "fiscal_warning", distance: 0.68, label: "財源説明で接近" },
+      { from: "benefit_expectation", to: "implementation_cost", distance: 0.42, label: "制度設計への期待が近い" },
+      { from: "implementation_cost", to: "low_attention", distance: 0.57, label: "説明コストが共通論点" },
+      { from: "fiscal_warning", to: "low_attention", distance: 0.74, label: "関心軸が離れる" },
+    ],
+    hierarchy: {
+      label: `${title}への反応`,
+      size: 1200,
+      children: [
+        {
+          label: "賛成・条件付き支持",
+          size: 610,
+          children: [
+            { label: "生活改善期待", clusterId: "benefit_expectation", size: 320 },
+            { label: "実務条件次第", clusterId: "implementation_cost", size: 210 },
+          ],
+        },
+        {
+          label: "慎重・低関心",
+          size: 590,
+          children: [
+            { label: "財源懸念", clusterId: "fiscal_warning", size: 240 },
+            { label: "無関心・低理解", clusterId: "low_attention", size: 190 },
+          ],
+        },
+      ],
+    },
+  };
+}
+
+function sampleNationalPolicyDraft(policyTarget = selectedPolicyTarget()) {
+  const title = policyTarget?.title || "対象政策";
+  const isDx = policyTarget?.id === "gov_dx";
+  const isChild = policyTarget?.id === "child_support";
+  const budget = isDx ? 8200 : isChild ? 26000 : 42000;
+  const directLabel = isDx ? "共通基盤・システム整備" : isChild ? "対象世帯への給付拡充" : `${title}の時限実施`;
+  const supportLabel = isDx ? "自治体・行政現場の移行支援" : isChild ? "申請・給付事務" : "低所得層への補完策";
+  return {
+    id: `initial_${policyTarget?.id || "free_policy"}`,
+    title: `${title}の初期実施案`,
+    summary: `${title}を短期実行する前提で、対象範囲・財源補完・実施負荷を分けて検討する初期案。`,
+    primaryIssueId: policyTarget?.id || appData.issueSelectionChat.selectedIssueId,
+    secondaryIssueIds: [],
+    budget,
+    cashUse: Math.round(budget * 0.46),
+    financePlan: "短期は既存予算の組替えと国債・予備費を組み合わせ、恒久化は別途財源を精査する。",
+    costBreakdown: [
+      {
+        id: "core_policy_cost",
+        label: directLabel,
+        amount: Math.round(budget * 0.62),
+        unit: "億円",
+        costType: isDx ? "システム投資" : "直接支出・税収影響",
+        target: isDx ? "国・自治体の行政基盤" : "主対象世帯・事業者",
+        calculation: "対象範囲と1年分の実施規模から概算",
+        fundingSource: "既存予算組替え、予備費、短期国債",
+        details: [
+          { label: "主施策実施費", amount: Math.round(budget * 0.44), unit: "億円", memo: "政策効果の中心となる費用" },
+          { label: "制度移行費", amount: Math.round(budget * 0.18), unit: "億円", memo: "施行準備・周知・移行対応" },
+        ],
+      },
+      {
+        id: "support_cost",
+        label: supportLabel,
+        amount: Math.round(budget * 0.24),
+        unit: "億円",
+        costType: "補完策",
+        target: "不利益・低便益が出やすい層",
+        calculation: "対象者・自治体事務・相談対応をまとめて概算",
+        fundingSource: "予備費と省庁横断の組替え",
+        details: [
+          { label: "重点支援枠", amount: Math.round(budget * 0.15), unit: "億円", memo: "所得・地域・世代差への補正" },
+          { label: "相談・広報・事務", amount: Math.round(budget * 0.09), unit: "億円", memo: "低理解層と現場負荷への対応" },
+        ],
+      },
+      {
+        id: "fiscal_buffer",
+        label: "財源補填・出口対策",
+        amount: Math.round(budget * 0.14),
+        unit: "億円",
+        costType: "財源補填",
+        target: "財政余力・長期持続性",
+        calculation: "短期実行後の反動と恒久化圧力を抑えるための調整枠",
+        fundingSource: "歳出見直しと制度終了時の調整財源",
+        details: [
+          { label: "出口戦略準備", amount: Math.round(budget * 0.08), unit: "億円", memo: "時限措置終了時の反動を抑える" },
+          { label: "財源説明・検証", amount: Math.round(budget * 0.06), unit: "億円", memo: "国会説明と政策評価のための枠" },
+        ],
+      },
+    ],
+    implementationDetails: [
+      `${title}の対象範囲、実施期間、除外条件を最初に明文化する。`,
+      "所得別・世代別・産業別の影響を毎月モニタリングする。",
+      "低便益または不利益が出やすい層には補完策と説明導線を用意する。",
+    ],
+    expectedEffects: [
+      "短期的な政策納得度と生活・事務負担の改善を狙う。",
+      "産業別・所得別の効果差を見える化し、修正余地を残す。",
+    ],
+    concerns: [
+      "財源補填が弱いと財政余力への懸念が強まる。",
+      "対象範囲が曖昧だと無関心層や実務層に伝わりにくい。",
+    ],
+    beneficiaryGroups: [
+      { groupId: "middle_income", label: "中間層", reason: "生活・手続き負担の改善を比較的広く実感しやすい。" },
+      { groupId: "progressive", label: "リベラル層", reason: "再分配や制度改善の方向性を評価しやすい。" },
+    ],
+    lowBenefitGroups: [
+      { groupId: "fiscal_conservative", label: "財政規律重視層", reason: "財源補填と恒久化リスクへの懸念が残る。" },
+      { groupId: "indifferent", label: "無関心層", reason: "生活上の変化が分かりにくいと関心を持ちにくい。" },
+    ],
+    shortTermEffects: {
+      support: 5,
+      economicRipple: isDx ? 4 : 6,
+      fiscalCapacity: -4,
+      teacherSatisfaction: isDx ? 6 : -1,
+      importIndustryImpact: 2,
+      exportIndustryImpact: 1,
+      manufacturingImpact: isDx ? 4 : 2,
+      agricultureImpact: isChild ? 3 : 1,
+      financeIndustryImpact: isDx ? 5 : -1,
+    },
+    longTermEffects: { trust: 2, polarization: -1, fatigue: 1, publicValue: 3 },
+    risks: ["財源補填不足", "対象範囲の説明不足", "実施現場の負荷増"],
+  };
+}
+
+function generatePolicyTargetInitialData() {
+  const policyTarget = selectedPolicyTarget();
+  if (!policyTarget) {
+    saveStatus = "政策ターゲットを選択してください";
+    App(appData);
+    return;
+  }
+  appData.voices = sampleNationalVoices(policyTarget);
+  appData.voiceAnalysis = sampleNationalVoiceAnalysis(policyTarget, appData.voices);
+  applyPolicyDraft(sampleNationalPolicyDraft(policyTarget), { resetChat: true });
+  appData.issueSelectionChat.messages.push({
+    role: "assistant",
+    text: `「${policyTarget.title}」について仮想の国民・ステークホルダーの声と初期政策案を生成しました。声の分析画面でクラスターを確認できます。`,
+  });
+  saveStatus = "声の分析と初期政策案を生成しました";
+  activeView = "voices";
+  App(appData);
 }
 
 function SourceTypeLabel(sourceType) {
@@ -2736,6 +3061,16 @@ function VoiceAnalysisViewer() {
   `;
 }
 
+function EmptyWorkflowPanel(title, message, actionLabel = "政策ターゲットへ進む") {
+  return `
+    <div class="turn-result-preview empty workflow-empty">
+      <span>${title}</span>
+      <p>${message}</p>
+      <button class="primary" type="button" data-jump-view="issues">${actionLabel}</button>
+    </div>
+  `;
+}
+
 function IssueMap() {
   return `
     <div class="issue-map">
@@ -2869,6 +3204,13 @@ function IssueSelectionChat(context = "issues") {
 
 function PolicyPreview() {
   const { policy } = appData;
+  if (isNationalScenario() && !hasNationalAnalysisStarted()) {
+    return `
+      <article class="policy-preview">
+        ${EmptyWorkflowPanel("政策案は未生成", "政策ターゲットを決定して「声の分析へ進む」を押すと、仮想の声と同時に初期政策案を生成します。")}
+      </article>
+    `;
+  }
   const hasDraft = policy.effects.length > 0;
   const policyExecuted = Boolean(appData.lastSimulationResult);
   const canCreateAnnual = policyExecuted && currentTurn().term >= 3 && !appData.annualReport;
@@ -3238,6 +3580,22 @@ function DashboardView() {
 
 function VoicesView() {
   if (isNationalScenario()) {
+    if (!hasNationalAnalysisStarted()) {
+      return `
+        <section class="single-view">
+          <article class="panel voice-panel">
+            <div class="panel-header">
+              <div>
+                <span class="section-label">声の分析</span>
+                <h2>国民・ステークホルダーの反応</h2>
+              </div>
+              <small>未生成</small>
+            </div>
+            ${EmptyWorkflowPanel("声の分析は未生成", "政策ターゲットを選択または自由記述で追加し、政策ターゲット画面の「声の分析へ進む」から仮想データを生成します。")}
+          </article>
+        </section>
+      `;
+    }
     return `
       <section class="single-view">
         <article class="panel voice-panel">
@@ -3315,6 +3673,10 @@ function IssuesView() {
             <div><strong>関連指標</strong><span>${(policyTarget?.metrics || []).join(" / ")}</span></div>
             <div><strong>推奨ビュー</strong><span>${(policyTarget?.recommendedViews || []).join(" / ")}</span></div>
             <div><strong>財源上の注意</strong><span>${policyTarget?.fundingNote || "政策案生成時に確認"}</span></div>
+          </div>
+          <div class="target-flow-actions">
+            <button id="generate-target-analysis" class="primary" type="button" ${policyTarget ? "" : "disabled"}>声の分析へ進む</button>
+            <small>${policyTarget ? "仮想の声データと初期政策案を生成します。" : "左側から政策ターゲットを選択してください。"}</small>
           </div>
           ${IssueSelectionChat()}
         </article>
@@ -3828,6 +4190,9 @@ function bindInteractions() {
     upsertFreePolicyTarget(buildFreePolicyTarget(text));
     App(appData);
   });
+  document.querySelector("#generate-target-analysis")?.addEventListener("click", () => {
+    generatePolicyTargetInitialData();
+  });
   document.querySelectorAll("[data-jump-view]").forEach((button) => {
     button.addEventListener("click", (event) => {
       activeView = event.currentTarget.dataset.jumpView;
@@ -4006,7 +4371,11 @@ function bindInteractions() {
     try {
       const result = await discussIssueSelection(text);
       appData.issueSelectionChat.messages.push({ role: "assistant", text: result.message });
+      const previousIssueId = appData.issueSelectionChat.selectedIssueId;
       appData.issueSelectionChat.selectedIssueId = result.recommendedIssueIds?.[0] || appData.issueSelectionChat.selectedIssueId;
+      if (isNationalScenario() && previousIssueId !== appData.issueSelectionChat.selectedIssueId) {
+        clearNationalGeneratedOutputs();
+      }
       resetPolicyDrivenViews(selectedPolicyTarget());
     } finally {
       App(appData);
@@ -4018,7 +4387,11 @@ function bindInteractions() {
       const issue = appData.issues.find((candidate) => candidate.id === issueId);
       if (!issue) return;
 
+      const previousIssueId = appData.issueSelectionChat.selectedIssueId;
       appData.issueSelectionChat.selectedIssueId = issue.id;
+      if (isNationalScenario() && previousIssueId !== issue.id) {
+        clearNationalGeneratedOutputs();
+      }
       resetPolicyDrivenViews((appData.policyTargets || []).find((target) => target.id === issue.id) || issue);
       appData.issueSelectionChat.messages.push({ role: "user", text: `課題「${issue.title}」を選択しました。内容を詳しく説明してください。` });
       const loadingMessageIndex = appData.issueSelectionChat.messages.push({ role: "assistant", text: `「${issue.title}」の背景と関連指標を分析しています。` }) - 1;
@@ -4026,7 +4399,11 @@ function bindInteractions() {
       try {
         const result = await explainIssueSelection(issue);
         appData.issueSelectionChat.messages[loadingMessageIndex] = { role: "assistant", text: result.message };
+        const previousIssueId = appData.issueSelectionChat.selectedIssueId;
         appData.issueSelectionChat.selectedIssueId = result.recommendedIssueIds?.[0] || issue.id;
+        if (isNationalScenario() && previousIssueId !== appData.issueSelectionChat.selectedIssueId) {
+          clearNationalGeneratedOutputs();
+        }
         resetPolicyDrivenViews(selectedPolicyTarget());
       } finally {
         App(appData);
