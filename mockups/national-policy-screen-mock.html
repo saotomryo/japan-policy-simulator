@@ -76,11 +76,17 @@
           </div>
 
           <div class="dashboard-layout">
-            <article class="panel wide-panel">
-              <div class="panel-head">
-                <h3>主要指標</h3>
-                <span class="data-chip">出典メタデータ付き</span>
+          <article class="panel wide-panel">
+            <div class="panel-head">
+                <h3>政策関連指標</h3>
+                <div class="view-switch" aria-label="指標表示切替">
+                  <button class="active" type="button">関連指標</button>
+                  <button type="button">財政</button>
+                  <button type="button">社会影響</button>
+                  <button type="button">全体</button>
+                </div>
               </div>
+              <p class="panel-note">表示中の指標は、選択政策の `relatedMetricIds` から自動で優先表示します。</p>
               <div class="metric-table">
                 <div class="metric-row">
                   <span>家計可処分所得</span>
@@ -265,6 +271,12 @@
             <article class="panel">
               <div class="panel-head">
                 <h3>世代別の想定効果</h3>
+                <div class="view-switch compact" aria-label="効果軸切替">
+                  <button class="active" type="button">世代</button>
+                  <button type="button">所得</button>
+                  <button type="button">地域</button>
+                  <button type="button">産業</button>
+                </div>
               </div>
               <div class="segment-effects">
                 <div><span>10代・20代</span><b>+6</b><i style="width:56%"></i><small>直接効果は限定的</small></div>
@@ -276,12 +288,12 @@
 
             <article class="panel">
               <div class="panel-head">
-                <h3>所得別の想定効果</h3>
+                <h3>関連が薄い効果軸</h3>
               </div>
-              <div class="segment-effects">
-                <div><span>低所得層</span><b>+15</b><i style="width:78%"></i><small>物価負担感に効果</small></div>
-                <div><span>中間層</span><b>+11</b><i style="width:66%"></i><small>広く便益</small></div>
-                <div><span>高所得層</span><b>+5</b><i style="width:48%"></i><small>相対効果は小さい</small></div>
+              <div class="applicability-box">
+                <strong>国際関係</strong>
+                <p>消費税減税では、国際関係への直接影響は限定的です。必要な場合のみ詳細ビューで確認します。</p>
+                <span>applicability: low_relevance</span>
               </div>
             </article>
           </div>
@@ -350,6 +362,17 @@
                 <div><strong>所得別</strong><span>低所得層の便益が最大</span></div>
                 <div><strong>国際関係</strong><span>直接影響は限定的</span></div>
               </div>
+              <div class="analysis-tabs">
+                <button class="active" type="button">所得別</button>
+                <button type="button">世代別</button>
+                <button type="button">クラスター別</button>
+                <button type="button">国際関係</button>
+                <button type="button">財政・実装</button>
+              </div>
+              <div class="dynamic-analysis">
+                <strong>現在の推奨ビュー: 所得別</strong>
+                <p>この政策では、消費支出に占める税負担の違いが効くため、所得別の便益差を最初に表示します。</p>
+              </div>
               <div class="precheck">
                 <span>政策実行は1回のみ</span>
                 <span>実行後は政策案をロック</span>
@@ -398,6 +421,11 @@
             <article class="panel">
               <div class="panel-head">
                 <h3>短期指標変化</h3>
+                <div class="view-switch compact" aria-label="結果指標切替">
+                  <button class="active" type="button">関連指標</button>
+                  <button type="button">財政</button>
+                  <button type="button">社会</button>
+                </div>
               </div>
               <div class="delta-list">
                 <div><span>家計可処分所得</span><b class="positive">+8</b></div>
@@ -409,7 +437,13 @@
             </article>
             <article class="panel">
               <div class="panel-head">
-                <h3>世代別・所得別の短期効果</h3>
+                <h3>効果軸別の短期効果</h3>
+              </div>
+              <div class="analysis-tabs compact">
+                <button class="active" type="button">所得別</button>
+                <button type="button">世代別</button>
+                <button type="button">地域別</button>
+                <button type="button">国際関係</button>
               </div>
               <div class="two-column-effects">
                 <div class="segment-effects compact">
