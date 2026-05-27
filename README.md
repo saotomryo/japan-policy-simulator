@@ -136,6 +136,12 @@ npm run codex:ai-bridge
 - [docs/national-policy-screen-spec.md](docs/national-policy-screen-spec.md)
 - [docs/local-ai.md](docs/local-ai.md)
 
+## 画面モック
+
+画面検討用の静的モックは以下です。
+
+- [mockups/national-policy-screen-mock.html](mockups/national-policy-screen-mock.html)
+
 ## 注意
 
 現在はプロトタイプ段階です。AI出力はJSON Schemaで検証する想定ですが、政策判断の正解を提供するものではありません。表示される国民の声、属性、指標、政策結果は、実統計値を参考にする場合を除き仮想データです。

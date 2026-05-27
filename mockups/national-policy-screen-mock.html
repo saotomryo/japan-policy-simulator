@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>国版 政策シミュレーター 画面モック</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23123b3f'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='18' fill='white' font-family='sans-serif'%3E政%3C/text%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="./national-policy-screen-mock.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="画面ナビゲーション">
+        <div class="brand">
+          <div class="brand-mark">政</div>
+          <div>
+            <strong>政策シミュレーター</strong>
+            <span>Japan Policy Lab</span>
+          </div>
+        </div>
+        <nav class="nav-tabs">
+          <button class="nav-tab active" type="button" data-view="dashboard">ダッシュボード</button>
+          <button class="nav-tab" type="button" data-view="target">政策ターゲット</button>
+          <button class="nav-tab" type="button" data-view="voices">声の分析</button>
+          <button class="nav-tab" type="button" data-view="policy">政策案</button>
+          <button class="nav-tab" type="button" data-view="result">実行結果</button>
+        </nav>
+        <div class="sidebar-actions">
+          <button class="ghost-button" type="button">保存</button>
+          <button class="ghost-button" type="button">AI設定</button>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <p class="screen-kicker">MVP screen mock</p>
+            <h1>国版 政策シミュレーター</h1>
+          </div>
+          <div class="status-strip" aria-label="進行状態">
+            <span>基準年 2025</span>
+            <span>政策案作成済み</span>
+            <strong>消費税減税</strong>
+          </div>
+        </header>
+
+        <section class="view active" data-view-panel="dashboard">
+          <div class="section-head">
+            <div>
+              <h2>ダッシュボード</h2>
+              <p>政策を決める前に、日本の初期状態とシミュレーション前提を確認します。</p>
+            </div>
+            <button class="primary-button" type="button" data-switch="target">政策ターゲットへ進む</button>
+          </div>
+
+          <div class="summary-grid">
+            <article class="summary-panel">
+              <span class="metric-label">国民生活満足度</span>
+              <strong>54</strong>
+              <small>実統計参考値 / score</small>
+            </article>
+            <article class="summary-panel">
+              <span class="metric-label">物価負担感</span>
+              <strong class="risk">73</strong>
+              <small>AI推定 / score</small>
+            </article>
+            <article class="summary-panel">
+              <span class="metric-label">財政余力</span>
+              <strong class="warn">41</strong>
+              <small>実統計参考値 / score</small>
+            </article>
+            <article class="summary-panel">
+              <span class="metric-label">国際信頼度</span>
+              <strong>68</strong>
+              <small>固定初期値 / score</small>
+            </article>
+          </div>
+
+          <div class="dashboard-layout">
+            <article class="panel wide-panel">
+              <div class="panel-head">
+                <h3>主要指標</h3>
+                <span class="data-chip">出典メタデータ付き</span>
+              </div>
+              <div class="metric-table">
+                <div class="metric-row">
+                  <span>家計可処分所得</span>
+                  <div class="bar"><i style="width: 52%"></i></div>
+                  <strong>52</strong>
+                  <em>実統計参考値</em>
+                </div>
+                <div class="metric-row">
+                  <span>税負担感</span>
+                  <div class="bar danger"><i style="width: 66%"></i></div>
+                  <strong>66</strong>
+                  <em>AI推定</em>
+                </div>
+                <div class="metric-row">
+                  <span>社会保障持続性</span>
+                  <div class="bar warning"><i style="width: 45%"></i></div>
+                  <strong>45</strong>
+                  <em>実統計参考値</em>
+                </div>
+                <div class="metric-row">
+                  <span>政策納得度</span>
+                  <div class="bar"><i style="width: 49%"></i></div>
+                  <strong>49</strong>
+                  <em>仮想指標</em>
+                </div>
+                <div class="metric-row">
+                  <span>行政現場負荷</span>
+                  <div class="bar danger"><i style="width: 61%"></i></div>
+                  <strong>61</strong>
+                  <em>AI推定</em>
+                </div>
+              </div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-head">
+                <h3>人口構成サマリー</h3>
+              </div>
+              <div class="stack-list">
+                <div class="stack-item">
+                  <span>世代構成</span>
+                  <div class="stacked-bar" aria-hidden="true">
+                    <i style="width: 22%; background:#3b82f6"></i>
+                    <i style="width: 31%; background:#14b8a6"></i>
+                    <i style="width: 18%; background:#f59e0b"></i>
+                    <i style="width: 29%; background:#64748b"></i>
+                  </div>
+                  <small>若年 22 / 現役 49 / 高齢 29</small>
+                </div>
+                <div class="stack-item">
+                  <span>所得階層</span>
+                  <div class="stacked-bar" aria-hidden="true">
+                    <i style="width: 28%; background:#ef4444"></i>
+                    <i style="width: 56%; background:#22c55e"></i>
+                    <i style="width: 16%; background:#2563eb"></i>
+                  </div>
+                  <small>低 28 / 中 56 / 高 16</small>
+                </div>
+                <div class="stack-item">
+                  <span>地域構成</span>
+                  <div class="stacked-bar" aria-hidden="true">
+                    <i style="width: 61%; background:#0ea5e9"></i>
+                    <i style="width: 39%; background:#84cc16"></i>
+                  </div>
+                  <small>都市 61 / 地方 39</small>
+                </div>
+              </div>
+            </article>
+          </div>
+
+          <article class="panel">
+            <div class="panel-head">
+              <h3>国際関係スコア</h3>
+              <span class="data-chip">政策反応の初期値</span>
+            </div>
+            <div class="relation-grid">
+              <div class="relation-card"><strong>アメリカ</strong><span>関係 72</span><small>安全保障感度 高</small></div>
+              <div class="relation-card"><strong>EU</strong><span>関係 64</span><small>規制・標準に敏感</small></div>
+              <div class="relation-card"><strong>中国</strong><span>関係 46</span><small>通商摩擦リスク 中</small></div>
+              <div class="relation-card"><strong>アジア</strong><span>関係 69</span><small>サプライチェーン重要</small></div>
+              <div class="relation-card"><strong>グローバルサウス</strong><span>関係 58</span><small>説明コスト 中</small></div>
+              <div class="relation-card"><strong>国際機関</strong><span>関係 62</span><small>制度整合性を重視</small></div>
+            </div>
+          </article>
+        </section>
+
+        <section class="view" data-view-panel="target">
+          <div class="section-head">
+            <div>
+              <h2>政策ターゲット</h2>
+              <p>プリセットまたは自由記述から、分析対象の政策を構造化します。</p>
+            </div>
+            <button class="primary-button" type="button" data-switch="voices">声を生成する</button>
+          </div>
+
+          <div class="target-layout">
+            <article class="panel">
+              <div class="panel-head">
+                <h3>MVPプリセット</h3>
+              </div>
+              <div class="policy-choice selected">
+                <strong>消費税減税</strong>
+                <p>物価高対策として、時限的に消費税率を引き下げる。</p>
+                <span>財源注意</span>
+              </div>
+              <div class="policy-choice">
+                <strong>子育て支援給付の拡充</strong>
+                <p>子育て世帯への給付を増やし、出生・家計不安に対応する。</p>
+                <span>対象設計</span>
+              </div>
+              <div class="policy-choice">
+                <strong>行政DXの推進</strong>
+                <p>行政手続きのデジタル化で利用者負担と現場負荷を下げる。</p>
+                <span>実装負荷</span>
+              </div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-head">
+                <h3>自由記述</h3>
+              </div>
+              <label class="input-label" for="free-policy">検討したい政策</label>
+              <textarea id="free-policy">最低賃金を全国一律で大きく引き上げる政策を検討したい</textarea>
+              <div class="segmented-control" aria-label="政策強度">
+                <button type="button">小規模</button>
+                <button class="active" type="button">標準</button>
+                <button type="button">大規模</button>
+              </div>
+              <button class="secondary-button" type="button">自由記述を政策ターゲット化</button>
+            </article>
+
+            <article class="panel structured-policy">
+              <div class="panel-head">
+                <h3>AI構造化結果</h3>
+                <span class="data-chip">PolicyTarget</span>
+              </div>
+              <dl>
+                <dt>政策分野</dt><dd>税制・家計支援</dd>
+                <dt>主対象</dt><dd>家計、低所得層、中小企業、小売・サービス業</dd>
+                <dt>負担者</dt><dd>財政運営、将来世代、社会保障財源に依存する層</dd>
+                <dt>想定財源</dt><dd>国債増発と歳出見直しの組み合わせ</dd>
+                <dt>主な論点</dt><dd>物価負担、景気刺激、社会保障財源、逆進性対策</dd>
+              </dl>
+              <div class="warning-box">財源上の懸念: 恒久減税にすると社会保障財源への影響が大きく、時限措置と補填策の設計が必要です。</div>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" data-view-panel="voices">
+          <div class="section-head">
+            <div>
+              <h2>声の分析</h2>
+              <p>国民・ステークホルダーの想定反応を、賛否、利害、世代、所得で確認します。</p>
+            </div>
+            <button class="primary-button" type="button" data-switch="policy">政策案へ進む</button>
+          </div>
+
+          <div class="reaction-grid">
+            <article class="reaction-card support"><strong>38%</strong><span>賛成</span></article>
+            <article class="reaction-card oppose"><strong>27%</strong><span>反対</span></article>
+            <article class="reaction-card conditional"><strong>24%</strong><span>条件付き</span></article>
+            <article class="reaction-card muted"><strong>11%</strong><span>無関心</span></article>
+          </div>
+
+          <div class="voice-layout">
+            <article class="panel cluster-panel">
+              <div class="panel-head">
+                <h3>意見クラスターマップ</h3>
+                <span class="axis-note">横: 賛否 / 縦: 利害の強さ</span>
+              </div>
+              <div class="cluster-map" aria-label="意見クラスターマップ">
+                <span class="axis-x"></span>
+                <span class="axis-y"></span>
+                <button class="cluster-dot support-dot" style="left: 72%; top: 28%; width: 64px; height: 64px">家計負担</button>
+                <button class="cluster-dot warn-dot" style="left: 56%; top: 54%; width: 52px; height: 52px">条件付き</button>
+                <button class="cluster-dot oppose-dot" style="left: 24%; top: 35%; width: 58px; height: 58px">財源懸念</button>
+                <button class="cluster-dot neutral-dot" style="left: 44%; top: 72%; width: 44px; height: 44px">無関心</button>
+                <button class="cluster-dot intl-dot" style="left: 35%; top: 18%; width: 42px; height: 42px">国際</button>
+              </div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-head">
+                <h3>世代別の想定効果</h3>
+              </div>
+              <div class="segment-effects">
+                <div><span>10代・20代</span><b>+6</b><i style="width:56%"></i><small>直接効果は限定的</small></div>
+                <div><span>30代</span><b>+12</b><i style="width:68%"></i><small>家計負担軽減</small></div>
+                <div><span>40代</span><b>+10</b><i style="width:64%"></i><small>消費支出に効果</small></div>
+                <div><span>70代以上</span><b>+8</b><i style="width:60%"></i><small>医療財源に懸念</small></div>
+              </div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-head">
+                <h3>所得別の想定効果</h3>
+              </div>
+              <div class="segment-effects">
+                <div><span>低所得層</span><b>+15</b><i style="width:78%"></i><small>物価負担感に効果</small></div>
+                <div><span>中間層</span><b>+11</b><i style="width:66%"></i><small>広く便益</small></div>
+                <div><span>高所得層</span><b>+5</b><i style="width:48%"></i><small>相対効果は小さい</small></div>
+              </div>
+            </article>
+          </div>
+
+          <article class="panel">
+            <div class="panel-head">
+              <h3>代表発話</h3>
+            </div>
+            <div class="voice-cards">
+              <div class="voice-card">
+                <strong>地方在住の70代・保守寄り</strong>
+                <span>条件付き賛成</span>
+                <p>物価が上がっているので減税は助かるが、医療や介護の財源が削られるなら不安もある。</p>
+              </div>
+              <div class="voice-card">
+                <strong>都市部の30代子育て世帯</strong>
+                <span>賛成</span>
+                <p>食品や日用品の負担が下がるなら実感は大きい。時限措置でもいいので早く効いてほしい。</p>
+              </div>
+              <div class="voice-card">
+                <strong>財政規律を重視する専門家層</strong>
+                <span>反対</span>
+                <p>短期の支持は得やすいが、社会保障財源の穴埋めを同時に示さないと長期の信頼を失う。</p>
+              </div>
+            </div>
+          </article>
+        </section>
+
+        <section class="view" data-view-panel="policy">
+          <div class="section-head">
+            <div>
+              <h2>政策案</h2>
+              <p>AI生成の政策案を確認し、チャットでクラスター別影響を詰めます。</p>
+            </div>
+            <button class="primary-button" type="button" data-switch="result">この内容で実行</button>
+          </div>
+
+          <div class="policy-layout">
+            <article class="panel policy-preview">
+              <div class="panel-head">
+                <h3>時限的な消費税減税と低所得世帯補完策</h3>
+                <span class="data-chip">実行前</span>
+              </div>
+              <p class="lead-text">1年間の消費税率引き下げを行い、社会保障財源への補填と低所得世帯への追加支援を組み合わせます。</p>
+              <div class="warning-box">財源警告: 国債増発だけに依存すると、財政余力と将来世代への説明責任にリスクが残ります。</div>
+              <div class="policy-sections">
+                <div>
+                  <h4>短期効果</h4>
+                  <ul>
+                    <li>物価負担感の改善</li>
+                    <li>低所得層・中間層の可処分所得改善</li>
+                    <li>小売・サービス業の消費刺激</li>
+                  </ul>
+                </div>
+                <div>
+                  <h4>長期影響の予想</h4>
+                  <ul>
+                    <li>社会保障財源の補填設計が焦点</li>
+                    <li>恒久化した場合は財政余力が低下</li>
+                    <li>政策納得度は説明責任に左右される</li>
+                  </ul>
+                </div>
+              </div>
+              <div class="mini-effects">
+                <div><strong>世代別</strong><span>30代・40代に効果大</span></div>
+                <div><strong>所得別</strong><span>低所得層の便益が最大</span></div>
+                <div><strong>国際関係</strong><span>直接影響は限定的</span></div>
+              </div>
+              <div class="precheck">
+                <span>政策実行は1回のみ</span>
+                <span>実行後は政策案をロック</span>
+                <span>長期影響は予想</span>
+              </div>
+            </article>
+
+            <aside class="panel chat-panel">
+              <div class="panel-head">
+                <h3>政策分析チャット</h3>
+              </div>
+              <div class="prompt-chips">
+                <button type="button">どの世代に効果が大きい？</button>
+                <button type="button">所得別の不利益は？</button>
+                <button type="button">財源を変えると反応は？</button>
+                <button type="button">国際関係への影響は？</button>
+              </div>
+              <div class="chat-log">
+                <div class="message user">所得別の不利益は？</div>
+                <div class="message assistant">高所得層では相対的な便益が小さく、財源補填に所得課税を使う場合は負担感が増えます。低所得層には便益が集中しますが、社会保障財源への不安を補完策で抑える必要があります。</div>
+              </div>
+              <div class="chat-input">
+                <input type="text" value="無関心層に届く説明は？" />
+                <button type="button">送信</button>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <section class="view" data-view-panel="result">
+          <div class="section-head">
+            <div>
+              <h2>実行結果</h2>
+              <p>政策実行後の短期結果と、長期的に観測すべきリスクを分けて確認します。</p>
+            </div>
+            <button class="secondary-button" type="button" data-switch="target">新しい政策で開始</button>
+          </div>
+
+          <div class="result-summary">
+            <article><span>短期評価</span><strong>負担感は改善</strong><small>家計・低所得層で効果</small></article>
+            <article><span>主な副作用</span><strong>財源懸念</strong><small>社会保障持続性に注意</small></article>
+            <article><span>国際関係</span><strong>限定的</strong><small>説明コストは低い</small></article>
+          </div>
+
+          <div class="result-layout">
+            <article class="panel">
+              <div class="panel-head">
+                <h3>短期指標変化</h3>
+              </div>
+              <div class="delta-list">
+                <div><span>家計可処分所得</span><b class="positive">+8</b></div>
+                <div><span>税負担感</span><b class="positive">-11</b></div>
+                <div><span>財政余力</span><b class="negative">-7</b></div>
+                <div><span>社会保障持続性</span><b class="negative">-4</b></div>
+                <div><span>政策納得度</span><b class="positive">+6</b></div>
+              </div>
+            </article>
+            <article class="panel">
+              <div class="panel-head">
+                <h3>世代別・所得別の短期効果</h3>
+              </div>
+              <div class="two-column-effects">
+                <div class="segment-effects compact">
+                  <div><span>30代</span><b>+12</b><i style="width:68%"></i></div>
+                  <div><span>40代</span><b>+10</b><i style="width:64%"></i></div>
+                  <div><span>70代以上</span><b>+8</b><i style="width:60%"></i></div>
+                </div>
+                <div class="segment-effects compact">
+                  <div><span>低所得層</span><b>+15</b><i style="width:78%"></i></div>
+                  <div><span>中間層</span><b>+11</b><i style="width:66%"></i></div>
+                  <div><span>高所得層</span><b>+5</b><i style="width:48%"></i></div>
+                </div>
+              </div>
+            </article>
+          </div>
+
+          <div class="result-layout">
+            <article class="panel">
+              <div class="panel-head">
+                <h3>クラスター別影響</h3>
+              </div>
+              <table class="impact-table">
+                <thead><tr><th>クラスター</th><th>便益</th><th>不利益</th><th>納得度</th></tr></thead>
+                <tbody>
+                  <tr><td>家計負担軽減層</td><td>高</td><td>低</td><td>72</td></tr>
+                  <tr><td>財政規律重視層</td><td>低</td><td>中</td><td>38</td></tr>
+                  <tr><td>無関心層</td><td>中</td><td>低</td><td>51</td></tr>
+                </tbody>
+              </table>
+            </article>
+            <article class="panel">
+              <div class="panel-head">
+                <h3>国際関係クラスター別反応</h3>
+              </div>
+              <div class="relation-grid compact">
+                <div class="relation-card"><strong>アメリカ</strong><span>0</span><small>直接影響は限定的</small></div>
+                <div class="relation-card"><strong>EU</strong><span>0</span><small>財政規律に注目</small></div>
+                <div class="relation-card"><strong>中国</strong><span>+1</span><small>消費刺激を注視</small></div>
+                <div class="relation-card"><strong>アジア</strong><span>+1</span><small>需要増に期待</small></div>
+              </div>
+            </article>
+          </div>
+
+          <article class="panel">
+            <div class="panel-head">
+              <h3>長期予想</h3>
+              <span class="data-chip warning">確定結果ではありません</span>
+            </div>
+            <div class="long-term-grid">
+              <div>
+                <strong>長期リスク</strong>
+                <p>恒久化した場合、財政余力と社会保障持続性が低下する可能性があります。</p>
+              </div>
+              <div>
+                <strong>観測すべき指標</strong>
+                <p>税収、消費動向、社会保障財源、政策納得度、将来世代への負担感。</p>
+              </div>
+              <div>
+                <strong>別要因で変動しやすい点</strong>
+                <p>物価、賃金、景気循環、国際的な金融環境により効果は大きく変わります。</p>
+              </div>
+            </div>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <script>
+      const switchView = (view) => {
+        document.querySelectorAll(".nav-tab").forEach((tab) => {
+          tab.classList.toggle("active", tab.dataset.view === view);
+        });
+        document.querySelectorAll(".view").forEach((panel) => {
+          panel.classList.toggle("active", panel.dataset.viewPanel === view);
+        });
+      };
+
+      document.querySelectorAll("[data-view], [data-switch]").forEach((control) => {
+        control.addEventListener("click", () => switchView(control.dataset.view || control.dataset.switch));
+      });
+    </script>
+  </body>
+</html>
