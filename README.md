@@ -133,6 +133,7 @@ npm run codex:ai-bridge
 
 - [docs/national-policy-simulator-requirements.md](docs/national-policy-simulator-requirements.md)
 - [docs/national-policy-application-spec.md](docs/national-policy-application-spec.md)
+- [docs/national-policy-screen-spec.md](docs/national-policy-screen-spec.md)
 - [docs/local-ai.md](docs/local-ai.md)
 
 ## 注意
