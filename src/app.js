@@ -10,6 +10,8 @@ let activeVoiceEffectAxis = "income";
 let activePolicyEffectAxis = "income";
 let activeResultEffectAxis = "related";
 let activePolicyPanel = "cost";
+let activeFreePolicyScale = "standard";
+let freePolicyDraftText = "";
 
 const providerPresets = {
   sample: { label: "固定サンプル", baseUrl: "", model: "sample" },
@@ -1979,6 +1981,18 @@ function isNationalScenario(data = appData) {
   return data?.scenario?.id === "national";
 }
 
+function escapeHtml(value = "") {
+  return String(value).replace(/[&<>"']/g, (char) => (
+    {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#039;",
+    }[char]
+  ));
+}
+
 function selectedPolicyTarget() {
   const selectedId = appData.issueSelectionChat?.selectedIssueId;
   return (appData.policyTargets || appData.issues || []).find((target) => target.id === selectedId) || (appData.policyTargets || appData.issues || [])[0];
@@ -1996,6 +2010,52 @@ function resetPolicyDrivenViews(policyTarget = selectedPolicyTarget()) {
   activePolicyEffectAxis = axis;
   activeResultEffectAxis = "related";
   activePolicyPanel = "cost";
+}
+
+function buildFreePolicyTarget(text, scale = activeFreePolicyScale) {
+  const scaleLabels = {
+    small: "小規模",
+    standard: "標準",
+    large: "大規模",
+  };
+  const scaleLabel = scaleLabels[scale] || scaleLabels.standard;
+  const trimmedText = text.trim();
+  const title = trimmedText.length > 30 ? `${trimmedText.slice(0, 30)}...` : trimmedText;
+  return {
+    id: `free_policy_${Date.now()}`,
+    title,
+    fit: scale === "large" ? 61 : scale === "small" ? 68 : 64,
+    metrics: ["政策納得度", "経済波及効果", "財政余力", "行政現場負荷"],
+    summary: `${trimmedText}。自由記述から作成した${scaleLabel}規模の政策ターゲットです。初期段階では、関連指標と国民・ステークホルダー反応を仮説として分析します。`,
+    field: "自由記述・AI生成分野",
+    relatedMetricIds: ["support", "economicRipple", "fiscalCapacity", "teacherSatisfaction"],
+    recommendedViews: scale === "large" ? ["fiscal", "industry", "generation", "clusters"] : ["industry", "income", "fiscal", "clusters"],
+    fundingNote: scale === "large"
+      ? "大規模政策として、財源規模・実施体制・移行期間の制約を強めに確認します。"
+      : "詳細な財源規模は政策案生成時に確認します。",
+  };
+}
+
+function upsertFreePolicyTarget(policyTarget) {
+  const removeFreeTargets = (item) => !item.id?.startsWith("free_policy_");
+  appData.policyTargets = [policyTarget, ...(appData.policyTargets || []).filter(removeFreeTargets)];
+  appData.issues = [
+    {
+      id: policyTarget.id,
+      title: policyTarget.title,
+      fit: policyTarget.fit,
+      metrics: policyTarget.metrics,
+      summary: policyTarget.summary,
+    },
+    ...(appData.issues || []).filter(removeFreeTargets),
+  ];
+  appData.issueSelectionChat.selectedIssueId = policyTarget.id;
+  appData.issueSelectionChat.messages.push({ role: "user", text: `自由記述政策「${policyTarget.title}」を追加しました。` });
+  appData.issueSelectionChat.messages.push({
+    role: "assistant",
+    text: `自由記述を政策ターゲット化しました。関連指標は ${policyTarget.metrics.join(" / ")}、推奨ビューは ${policyTarget.recommendedViews.join(" / ")} です。${policyTarget.fundingNote}`,
+  });
+  resetPolicyDrivenViews(policyTarget);
 }
 
 function SourceTypeLabel(sourceType) {
@@ -2713,6 +2773,33 @@ function IssueList() {
     .join("");
 }
 
+function FreePolicyTargetForm() {
+  const scales = [
+    ["standard", "標準"],
+    ["small", "小規模"],
+    ["large", "大規模"],
+  ];
+  return `
+    <div class="free-policy-form">
+      <label class="input-label" for="free-policy-input">自由記述で追加</label>
+      <textarea id="free-policy-input" rows="5" placeholder="例: 最低賃金を全国一律で大きく引き上げる政策を検討したい">${escapeHtml(freePolicyDraftText)}</textarea>
+      <div class="segmented-control" aria-label="政策規模">
+        ${scales
+          .map(
+            ([value, label]) => `
+              <button class="${activeFreePolicyScale === value ? "active" : ""}" type="button" data-free-policy-scale="${value}" aria-pressed="${activeFreePolicyScale === value}">
+                ${label}
+              </button>
+            `,
+          )
+          .join("")}
+      </div>
+      <button id="structure-free-policy" class="primary" type="button">政策ターゲット化</button>
+      <p>入力内容から関連指標と推奨ビューを仮生成し、政策ターゲットとして選択します。</p>
+    </div>
+  `;
+}
+
 function IssueSelectionChat(context = "issues") {
   const chat = appData.issueSelectionChat;
   const currentIssue = selectedIssue();
@@ -3210,9 +3297,10 @@ function IssuesView() {
               <span class="section-label">政策ターゲット</span>
               <h2>分析対象の政策を選ぶ</h2>
             </div>
-            <small>MVPプリセット</small>
+            <small>MVPプリセット / 自由記述</small>
           </div>
           <div class="issue-list">${IssueList()}</div>
+          ${FreePolicyTargetForm()}
         </article>
         <article class="panel issue-chat-panel">
           <div class="panel-header">
@@ -3720,6 +3808,25 @@ function bindInteractions() {
       activeResultEffectAxis = event.currentTarget.dataset.resultEffectAxis;
       App(appData);
     });
+  });
+  document.querySelectorAll("[data-free-policy-scale]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      freePolicyDraftText = document.querySelector("#free-policy-input")?.value || freePolicyDraftText;
+      activeFreePolicyScale = event.currentTarget.dataset.freePolicyScale;
+      App(appData);
+    });
+  });
+  document.querySelector("#structure-free-policy")?.addEventListener("click", () => {
+    const input = document.querySelector("#free-policy-input");
+    const text = input?.value.trim() || "";
+    if (!text) {
+      saveStatus = "自由記述の政策内容を入力してください";
+      App(appData);
+      return;
+    }
+    freePolicyDraftText = text;
+    upsertFreePolicyTarget(buildFreePolicyTarget(text));
+    App(appData);
   });
   document.querySelectorAll("[data-jump-view]").forEach((button) => {
     button.addEventListener("click", (event) => {
