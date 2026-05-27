@@ -1774,8 +1774,135 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
-  .sentiment-row {
+.sentiment-row {
     grid-template-columns: 1fr;
     gap: 6px;
+  }
+}
+
+.national-dashboard .simple-main small {
+  display: block;
+  margin-top: 12px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.chart-tabs.compact {
+  justify-content: flex-start;
+  margin: 10px 0 16px;
+}
+
+.metric-detail-list,
+.segment-effect-list,
+.policy-target-meta {
+  display: grid;
+  gap: 10px;
+}
+
+.metric-detail-row,
+.segment-effect-row,
+.policy-target-meta > div,
+.relation-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.78);
+  padding: 12px;
+}
+
+.metric-detail-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) auto;
+  gap: 6px 12px;
+  align-items: start;
+}
+
+.metric-detail-row span {
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.metric-detail-row small,
+.metric-detail-row p,
+.segment-effect-row small,
+.segment-effect-row p,
+.relation-card p,
+.policy-target-meta span {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.metric-detail-row p {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.effect-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.effect-grid section:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+.segment-effect-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) auto;
+  gap: 6px 12px;
+}
+
+.segment-effect-row strong {
+  font-size: 20px;
+}
+
+.segment-effect-row p,
+.segment-effect-row small {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.segment-effect-row.low_relevance,
+.segment-effect-row.not_applicable {
+  border-style: dashed;
+  background: rgba(245, 248, 250, 0.9);
+}
+
+.policy-target-meta > div {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 10px;
+}
+
+.relation-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.relation-card {
+  display: grid;
+  gap: 6px;
+}
+
+.relation-card span {
+  color: var(--accent-strong);
+  font-weight: 900;
+}
+
+.national-relations-panel {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 960px) {
+  .effect-grid,
+  .relation-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .policy-target-meta > div,
+  .metric-detail-row,
+  .segment-effect-row {
+    grid-template-columns: 1fr;
   }
 }

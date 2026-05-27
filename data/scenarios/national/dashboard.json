@@ -1,0 +1,363 @@
+{
+  "scenario": {
+    "id": "national",
+    "title": "国版 政策シミュレーター",
+    "termLabel": "政策検討",
+    "seed": "JP-2025-MOCK",
+    "baseYear": 2025,
+    "status": "政策案作成済み",
+    "selectedPolicyTitle": "消費税減税"
+  },
+  "metrics": [
+    { "id": "support", "label": "政策納得度", "value": 49, "delta": 0, "tone": "warn", "visible": true, "category": "social", "sourceType": "fixed_virtual", "baseYear": 2025, "description": "政策説明への納得感を示す仮想指標" },
+    { "id": "happiness", "label": "国民生活満足度", "value": 54, "delta": 1, "tone": "warn", "visible": true, "category": "social", "sourceType": "official_stat_reference", "baseYear": 2025, "description": "生活全体への満足度をスコア化した参考値" },
+    { "id": "academic", "label": "家計可処分所得", "value": 52, "delta": 0, "tone": "warn", "visible": true, "category": "economy", "sourceType": "official_stat_reference", "baseYear": 2025, "description": "家計の余力を示す政策評価用スコア" },
+    { "id": "fairness", "label": "世代間公平感", "value": 43, "delta": -2, "tone": "risk", "visible": true, "category": "social", "sourceType": "ai_estimated", "baseYear": 2025, "description": "世代間の負担と便益の納得感" },
+    { "id": "rule", "label": "税負担感", "value": 66, "delta": 3, "tone": "risk", "visible": true, "category": "finance", "sourceType": "ai_estimated", "baseYear": 2025, "description": "税や社会保険料を含む負担感" },
+    { "id": "participation", "label": "政治参加意欲", "value": 38, "delta": -1, "tone": "risk", "visible": true, "category": "social", "sourceType": "fixed_virtual", "baseYear": 2025, "description": "政治参加や政策議論への関心" },
+    { "id": "externalReputation", "label": "国際信頼度", "value": 68, "delta": 0, "tone": "good", "visible": false, "category": "international", "sourceType": "fixed_virtual", "baseYear": 2025, "description": "国際社会からの制度・政策への信頼" },
+    { "id": "externalAchievements", "label": "サプライチェーン安定度", "value": 61, "delta": 0, "tone": "good", "visible": false, "category": "international", "sourceType": "fixed_virtual", "baseYear": 2025, "description": "通商・供給網の安定性" },
+    { "id": "teacherSatisfaction", "label": "行政現場負荷", "value": 61, "delta": 2, "tone": "warn", "visible": false, "category": "implementation", "sourceType": "ai_estimated", "baseYear": 2025, "description": "制度実装に伴う行政現場の負荷" },
+    { "id": "fiscalCapacity", "label": "財政余力", "value": 41, "delta": -2, "tone": "risk", "visible": true, "category": "finance", "sourceType": "official_stat_reference", "baseYear": 2025, "description": "追加政策を支える財政的な余力" },
+    { "id": "socialSecurity", "label": "社会保障持続性", "value": 45, "delta": -1, "tone": "warn", "visible": true, "category": "finance", "sourceType": "official_stat_reference", "baseYear": 2025, "description": "社会保障制度の持続性に関する参考スコア" }
+  ],
+  "financeMetrics": [
+    { "id": "budget", "label": "政策コスト枠", "value": 120000, "unit": "億円", "delta": 0, "tone": "warn" },
+    { "id": "cash", "label": "短期財源余地", "value": 42000, "unit": "億円", "delta": -18000, "tone": "warn" }
+  ],
+  "hiddenScores": [
+    { "id": "trust", "label": "制度への信頼", "hint": "政策説明と実行結果の一貫性から変動" },
+    { "id": "polarization", "label": "社会分断リスク", "hint": "不利益が特定層に集中すると上昇" },
+    { "id": "fatigue", "label": "制度疲労", "hint": "制度の複雑化と行政負荷から変動" },
+    { "id": "publicValue", "label": "長期公共性", "hint": "短期支持と長期持続性のバランスから変動" }
+  ],
+  "annualSignals": [
+    { "label": "短期効果", "value": "中", "text": "家計負担感には改善余地" },
+    { "label": "財源懸念", "value": "高", "text": "恒久化する場合は補填策が必要" },
+    { "label": "長期影響", "value": "予想", "text": "確定結果ではなく観測対象として扱う" }
+  ],
+  "trend": [
+    { "term": "前回推計", "support": 43, "happiness": 51, "fairness": 46 },
+    { "term": "現状", "support": 49, "happiness": 54, "fairness": 43 },
+    { "term": "政策案後", "support": 55, "happiness": 58, "fairness": 40 }
+  ],
+  "seasonalEvents": [
+    {
+      "id": "price_pressure",
+      "term": 1,
+      "title": "物価負担の高止まり",
+      "status": "継続",
+      "summary": "食品・日用品を中心に家計負担感が強く、即効性のある政策への期待が高い。",
+      "impactMetrics": ["税負担感", "家計可処分所得", "政策納得度"],
+      "risks": ["財源説明の不足", "一時的効果に留まる懸念"]
+    },
+    {
+      "id": "fiscal_sustainability",
+      "term": 1,
+      "title": "財政持続性への懸念",
+      "status": "注視",
+      "summary": "短期の負担軽減と、社会保障財源・将来世代への負担説明の両立が論点になる。",
+      "impactMetrics": ["財政余力", "社会保障持続性", "世代間公平感"],
+      "risks": ["恒久化圧力", "財源補填策への反発"]
+    }
+  ],
+  "groups": [
+    { "id": "low_income", "label": "低所得層", "positive": 58, "neutral": 25, "negative": 17 },
+    { "id": "middle_income", "label": "中間層", "positive": 52, "neutral": 28, "negative": 20 },
+    { "id": "fiscal_conservative", "label": "財政規律重視層", "positive": 18, "neutral": 28, "negative": 54 },
+    { "id": "young_liberal", "label": "若年リベラル層", "positive": 34, "neutral": 40, "negative": 26 },
+    { "id": "elder_conservative", "label": "高齢保守層", "positive": 41, "neutral": 31, "negative": 28 },
+    { "id": "indifferent", "label": "無関心層", "positive": 20, "neutral": 63, "negative": 17 }
+  ],
+  "populationSegments": [
+    { "id": "age_18_29", "label": "18から29歳", "axis": "generation", "ratio": 14, "sourceType": "official_stat_reference" },
+    { "id": "age_30_49", "label": "30から49歳", "axis": "generation", "ratio": 28, "sourceType": "official_stat_reference" },
+    { "id": "age_50_64", "label": "50から64歳", "axis": "generation", "ratio": 24, "sourceType": "official_stat_reference" },
+    { "id": "age_65_plus", "label": "65歳以上", "axis": "generation", "ratio": 29, "sourceType": "official_stat_reference" },
+    { "id": "income_low", "label": "低所得層", "axis": "income", "ratio": 28, "sourceType": "official_stat_reference" },
+    { "id": "income_middle", "label": "中間層", "axis": "income", "ratio": 56, "sourceType": "official_stat_reference" },
+    { "id": "income_high", "label": "高所得層", "axis": "income", "ratio": 16, "sourceType": "official_stat_reference" }
+  ],
+  "internationalRelations": [
+    { "id": "us", "label": "アメリカ", "relationScore": 72, "economicDependency": 68, "securitySensitivity": 90, "publicOpinionSensitivity": 62, "supplyChainImportance": 70, "reactionMemo": "安全保障と通商の両面で影響が大きい" },
+    { "id": "eu", "label": "EU", "relationScore": 64, "economicDependency": 50, "securitySensitivity": 48, "publicOpinionSensitivity": 54, "supplyChainImportance": 52, "reactionMemo": "財政規律や制度整合性への注目が強い" },
+    { "id": "china", "label": "中国", "relationScore": 46, "economicDependency": 74, "securitySensitivity": 78, "publicOpinionSensitivity": 66, "supplyChainImportance": 82, "reactionMemo": "需要刺激と通商影響を注視" },
+    { "id": "asia", "label": "アジア", "relationScore": 69, "economicDependency": 72, "securitySensitivity": 58, "publicOpinionSensitivity": 49, "supplyChainImportance": 80, "reactionMemo": "消費需要とサプライチェーンへの影響が焦点" },
+    { "id": "global_south", "label": "グローバルサウス", "relationScore": 58, "economicDependency": 42, "securitySensitivity": 38, "publicOpinionSensitivity": 44, "supplyChainImportance": 46, "reactionMemo": "国際説明コストは中程度" },
+    { "id": "international_orgs", "label": "国際機関", "relationScore": 62, "economicDependency": 30, "securitySensitivity": 34, "publicOpinionSensitivity": 57, "supplyChainImportance": 30, "reactionMemo": "財政・制度の持続性を重視" }
+  ],
+  "policyTargets": [
+    {
+      "id": "consumption_tax_cut",
+      "title": "消費税減税",
+      "fit": 88,
+      "metrics": ["税負担感", "家計可処分所得", "財政余力", "社会保障持続性"],
+      "summary": "物価高対策として時限的に消費税率を引き下げ、家計負担を軽減する。",
+      "field": "税制・家計支援",
+      "relatedMetricIds": ["rule", "academic", "fiscalCapacity", "socialSecurity", "support"],
+      "recommendedViews": ["income", "generation", "fiscal", "clusters"],
+      "fundingNote": "恒久化する場合は社会保障財源への補填策が必要。"
+    },
+    {
+      "id": "child_support",
+      "title": "子育て支援給付の拡充",
+      "fit": 76,
+      "metrics": ["家計可処分所得", "世代間公平感", "政策納得度"],
+      "summary": "子育て世帯への給付を増やし、出生・家計不安に対応する。",
+      "field": "子育て・社会保障",
+      "relatedMetricIds": ["academic", "fairness", "support", "fiscalCapacity"],
+      "recommendedViews": ["generation", "income", "regional", "fiscal"],
+      "fundingNote": "対象設計と所得制限の有無で賛否が分かれる。"
+    },
+    {
+      "id": "gov_dx",
+      "title": "行政DXの推進",
+      "fit": 69,
+      "metrics": ["行政現場負荷", "政策納得度", "国際信頼度"],
+      "summary": "行政手続きのデジタル化で利用者負担と現場負荷を下げる。",
+      "field": "行政改革・デジタル",
+      "relatedMetricIds": ["teacherSatisfaction", "support", "externalReputation"],
+      "recommendedViews": ["implementation", "digital_access", "generation", "clusters"],
+      "fundingNote": "初期投資と移行期の現場負荷が論点。"
+    }
+  ],
+  "issues": [
+    {
+      "id": "consumption_tax_cut",
+      "title": "消費税減税",
+      "fit": 88,
+      "metrics": ["税負担感", "家計可処分所得", "財政余力", "社会保障持続性"],
+      "summary": "物価高対策として時限的に消費税率を引き下げ、家計負担を軽減する。"
+    },
+    {
+      "id": "child_support",
+      "title": "子育て支援給付の拡充",
+      "fit": 76,
+      "metrics": ["家計可処分所得", "世代間公平感", "政策納得度"],
+      "summary": "子育て世帯への給付を増やし、出生・家計不安に対応する。"
+    },
+    {
+      "id": "gov_dx",
+      "title": "行政DXの推進",
+      "fit": 69,
+      "metrics": ["行政現場負荷", "政策納得度", "国際信頼度"],
+      "summary": "行政手続きのデジタル化で利用者負担と現場負荷を下げる。"
+    }
+  ],
+  "voices": [
+    {
+      "id": "voice_elder_local",
+      "name": "地方在住の70代男性",
+      "group": "高齢保守層",
+      "mood": "条件付き賛成",
+      "text": "物価が上がっているので減税は助かるが、医療や介護の財源が削られるなら不安もある。",
+      "avatar": { "slot": "green", "label": "高" }
+    },
+    {
+      "id": "voice_parent_urban",
+      "name": "都市部の30代子育て世帯",
+      "group": "中間層",
+      "mood": "賛成",
+      "text": "食品や日用品の負担が下がるなら実感は大きい。時限措置でもいいので早く効いてほしい。",
+      "avatar": { "slot": "sky", "label": "子" }
+    },
+    {
+      "id": "voice_fiscal_expert",
+      "name": "財政規律を重視する専門家",
+      "group": "財政規律重視層",
+      "mood": "反対",
+      "text": "短期の支持は得やすいが、社会保障財源の穴埋めを同時に示さないと長期の信頼を失う。",
+      "avatar": { "slot": "rose", "label": "財" }
+    },
+    {
+      "id": "voice_indifferent",
+      "name": "政治ニュースをあまり追わない20代",
+      "group": "無関心層",
+      "mood": "無関心",
+      "text": "減税は助かるかもしれないけれど、いつ何が変わるのか分かりにくいと関心を持ちにくい。",
+      "avatar": { "slot": "green", "label": "無" }
+    }
+  ],
+  "voiceAnalysis": {
+    "populationSize": 125000000,
+    "sampledOpinionCount": 1200,
+    "embeddingModel": "national-policy-mock",
+    "clusters": [
+      {
+        "id": "household_relief",
+        "label": "家計負担軽減",
+        "size": 310,
+        "sentiment": 0.62,
+        "x": 72,
+        "y": 72,
+        "keywords": ["物価", "家計", "消費", "減税"],
+        "summary": "物価負担への即効性を評価するが、恒久化や財源には慎重。",
+        "representativeVoiceIds": ["voice_parent_urban", "voice_elder_local"]
+      },
+      {
+        "id": "fiscal_warning",
+        "label": "財源懸念",
+        "size": 220,
+        "sentiment": -0.58,
+        "x": 142,
+        "y": 128,
+        "keywords": ["財源", "社会保障", "将来世代", "恒久化"],
+        "summary": "短期効果よりも財源補填と制度持続性を重視する声。",
+        "representativeVoiceIds": ["voice_fiscal_expert"]
+      },
+      {
+        "id": "conditional_support",
+        "label": "条件付き支持",
+        "size": 260,
+        "sentiment": 0.18,
+        "x": 292,
+        "y": 92,
+        "keywords": ["時限措置", "低所得層", "補完策", "説明"],
+        "summary": "時限措置や低所得層補完策があれば支持しやすい層。",
+        "representativeVoiceIds": ["voice_elder_local"]
+      },
+      {
+        "id": "indifferent_cluster",
+        "label": "無関心・低理解",
+        "size": 180,
+        "sentiment": -0.05,
+        "x": 318,
+        "y": 154,
+        "keywords": ["分かりにくい", "手続き", "実感", "関心薄い"],
+        "summary": "政策効果よりも、いつ何が変わるかの分かりやすさで反応が変わる層。",
+        "representativeVoiceIds": ["voice_indifferent"]
+      },
+      {
+        "id": "international_limited",
+        "label": "国際影響限定",
+        "size": 90,
+        "sentiment": 0.04,
+        "x": 92,
+        "y": 174,
+        "keywords": ["通商", "需要", "財政規律", "説明"],
+        "summary": "直接影響は限定的だが、財政規律への見方は国際的な説明材料になる。",
+        "representativeVoiceIds": []
+      }
+    ],
+    "distances": [
+      { "from": "household_relief", "to": "conditional_support", "distance": 0.22, "label": "家計支援への期待が近い" },
+      { "from": "household_relief", "to": "fiscal_warning", "distance": 0.54, "label": "短期便益と財源規律が対立" },
+      { "from": "conditional_support", "to": "fiscal_warning", "distance": 0.34, "label": "補完策次第で近づく" },
+      { "from": "indifferent_cluster", "to": "household_relief", "distance": 0.48, "label": "実感の説明で関心が上がる" },
+      { "from": "international_limited", "to": "fiscal_warning", "distance": 0.39, "label": "財政説明への関心を共有" }
+    ],
+    "hierarchy": {
+      "label": "全体の声",
+      "size": 1200,
+      "children": [
+        {
+          "label": "家計・生活実感",
+          "size": 570,
+          "children": [
+            { "clusterId": "household_relief", "label": "家計負担軽減", "size": 310 },
+            { "clusterId": "conditional_support", "label": "条件付き支持", "size": 260 }
+          ]
+        },
+        {
+          "label": "持続性・説明責任",
+          "size": 490,
+          "children": [
+            { "clusterId": "fiscal_warning", "label": "財源懸念", "size": 220 },
+            { "clusterId": "indifferent_cluster", "label": "無関心・低理解", "size": 180 },
+            { "clusterId": "international_limited", "label": "国際影響限定", "size": 90 }
+          ]
+        }
+      ]
+    }
+  },
+  "segmentEffects": {
+    "generation": [
+      { "segmentId": "age_18_29", "segmentLabel": "18から29歳", "axis": "generation", "applicability": "applicable", "effectScore": 6, "benefitLevel": "low", "riskLevel": "low", "summary": "消費支出への効果はあるが、子育て・医療ほど対象が集中しない。", "reason": "若年単身層では支出規模が比較的小さいため" },
+      { "segmentId": "age_30_49", "segmentLabel": "30から49歳", "axis": "generation", "applicability": "applicable", "effectScore": 12, "benefitLevel": "medium", "riskLevel": "low", "summary": "子育て・住宅関連支出が大きく、負担軽減の実感が出やすい。", "reason": "日用品と家族消費への影響が大きいため" },
+      { "segmentId": "age_50_64", "segmentLabel": "50から64歳", "axis": "generation", "applicability": "applicable", "effectScore": 10, "benefitLevel": "medium", "riskLevel": "medium", "summary": "消費支出には効果があるが、将来の社会保障財源への不安も残る。", "reason": "便益と将来不安が同時に出やすいため" },
+      { "segmentId": "age_65_plus", "segmentLabel": "65歳以上", "axis": "generation", "applicability": "applicable", "effectScore": 8, "benefitLevel": "medium", "riskLevel": "medium", "summary": "物価負担は下がるが、医療・介護財源への懸念が強い。", "reason": "社会保障財源への依存度が高いため" }
+    ],
+    "income": [
+      { "segmentId": "income_low", "segmentLabel": "低所得層", "axis": "income", "applicability": "applicable", "effectScore": 15, "benefitLevel": "high", "riskLevel": "low", "summary": "消費税負担の比率が高く、短期便益が大きい。", "reason": "消費支出が所得に占める割合が高いため" },
+      { "segmentId": "income_middle", "segmentLabel": "中間層", "axis": "income", "applicability": "applicable", "effectScore": 11, "benefitLevel": "medium", "riskLevel": "low", "summary": "広い層に便益が出るが、財源説明への関心も高い。", "reason": "支出規模と税負担感の双方が大きいため" },
+      { "segmentId": "income_high", "segmentLabel": "高所得層", "axis": "income", "applicability": "applicable", "effectScore": 5, "benefitLevel": "low", "riskLevel": "low", "summary": "金額上の便益はあるが、相対的な生活改善効果は小さい。", "reason": "所得に占める消費税負担の比率が比較的小さいため" }
+    ],
+    "international": [
+      { "segmentId": "international_relation", "segmentLabel": "国際関係", "axis": "international", "applicability": "low_relevance", "effectScore": null, "benefitLevel": "none", "riskLevel": "low", "summary": "消費税減税では国際関係への直接影響は限定的。", "reason": "主な効果が国内家計と財政に集中するため" }
+    ]
+  },
+  "issueSelectionChat": {
+    "title": "政策分析チャット",
+    "messages": [
+      {
+        "role": "assistant",
+        "text": "消費税減税は、所得別・世代別の便益差と財源補填が主な分析軸です。国際関係への直接影響は限定的ですが、財政規律への説明は必要です。"
+      },
+      {
+        "role": "user",
+        "text": "所得別に見ると、どの層に効果が大きいですか？"
+      },
+      {
+        "role": "assistant",
+        "text": "低所得層では消費支出が所得に占める割合が高いため、短期的な便益が最も大きくなります。中間層にも広く効果がありますが、高所得層では相対的な生活改善効果は小さめです。"
+      }
+    ],
+    "selectedIssueId": "consumption_tax_cut"
+  },
+  "policy": {
+    "id": "temporary_consumption_tax_cut",
+    "title": "時限的な消費税減税と低所得世帯補完策",
+    "summary": "1年間の消費税率引き下げを行い、社会保障財源への補填と低所得世帯への追加支援を組み合わせる。",
+    "budget": 98000,
+    "cashUse": 42000,
+    "financePlan": "国債増発と一部歳出見直しを組み合わせる。恒久化は行わない。",
+    "covers": ["消費税減税", "低所得層の物価負担軽減", "社会保障財源への補填"],
+    "implementationDetails": [
+      "1年間の時限措置として消費税率を引き下げる。",
+      "低所得世帯には追加給付を組み合わせ、逆進性対策を補強する。",
+      "社会保障財源への補填策を同時に示し、恒久化しない条件を明確化する。"
+    ],
+    "expectedEffects": [
+      "物価負担感を短期的に下げる。",
+      "低所得層と中間層の可処分所得を改善する。",
+      "小売・サービス消費の下支えを狙う。"
+    ],
+    "concerns": [
+      "財源補填が弱いと社会保障持続性への不安が強まる。",
+      "時限措置が恒久化圧力につながる可能性がある。",
+      "高所得層にも便益が及ぶため、政策対象の説明が必要。"
+    ],
+    "beneficiaryGroups": [
+      { "groupId": "low_income", "label": "低所得層", "reason": "消費税負担の比率が高く、負担軽減の実感が大きい。" },
+      { "groupId": "middle_income", "label": "中間層", "reason": "日用品・食品支出への影響が広く出る。" }
+    ],
+    "lowBenefitGroups": [
+      { "groupId": "fiscal_conservative", "label": "財政規律重視層", "reason": "財源補填と恒久化リスクへの懸念が残る。" },
+      { "groupId": "indifferent", "label": "無関心層", "reason": "制度変更の時期や実感が伝わらないと関心を持ちにくい。" }
+    ],
+    "shortTermEffects": { "support": 6, "happiness": 4, "academic": 8, "fairness": -3, "rule": -11, "participation": 2, "externalReputation": 0, "externalAchievements": 1, "teacherSatisfaction": -2 },
+    "longTermEffects": { "trust": -2, "polarization": 3, "fatigue": 2, "publicValue": -1 },
+    "risks": ["財源補填不足", "恒久化圧力", "社会保障財源への不安"],
+    "effects": [
+      { "label": "家計可処分所得", "value": 8, "tone": "good" },
+      { "label": "税負担感", "value": -11, "tone": "good" },
+      { "label": "財政余力", "value": -7, "tone": "warn" },
+      { "label": "社会保障持続性", "value": -4, "tone": "warn" }
+    ]
+  },
+  "policyChat": {
+    "title": "政策案をチャットで調整",
+    "messages": [
+      { "role": "assistant", "text": "この政策案では、所得別と世代別の短期効果を優先して確認できます。財源懸念を抑えるには、時限措置と補填策を明確にする必要があります。" }
+    ]
+  },
+  "lastSimulationResult": null,
+  "memory": null,
+  "hiddenScoreValues": {
+    "trust": -2,
+    "polarization": 3,
+    "fatigue": 2,
+    "publicValue": -1
+  },
+  "annualReport": null
+}

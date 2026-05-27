@@ -38,6 +38,7 @@ function currentTurn(data = appData) {
 }
 
 function termLabel(turn = currentTurn()) {
+  if (appData?.scenario?.id === "national") return "単発実行";
   return `${turn.term}学期`;
 }
 
@@ -49,7 +50,7 @@ function nextTurnValue(turn = currentTurn()) {
 }
 
 async function loadDashboardData() {
-  const response = await fetch(`./data/scenarios/school/dashboard.json?v=${Date.now()}`, { cache: "no-store" });
+  const response = await fetch(`./data/scenarios/national/dashboard.json?v=${Date.now()}`, { cache: "no-store" });
   if (!response.ok) {
     throw new Error(`Failed to load dashboard data: ${response.status}`);
   }
@@ -654,6 +655,15 @@ async function callProviderJson({ schemaName, prompt }) {
 }
 
 function sampleIssueSelectionResponse(userText) {
+  if (isNationalScenario()) {
+    return {
+      message: `「${userText}」については、選択政策の関連指標と推奨ビューを確認します。消費税減税では所得別・世代別の便益差と財源補填が中心で、国際関係は該当性が低めです。`,
+      recommendedIssueIds: [selectedPolicyTarget()?.id || "consumption_tax_cut"],
+      reasoning: ["relatedMetricIdsに税負担感・家計可処分所得・財政余力が含まれる", "recommendedViewsで所得別と世代別が優先される", "財源制約は警告として扱う"],
+      questionsToUser: ["所得別、世代別、財政影響のどれを先に確認しますか？"],
+      financeAssessment: { cashFeasibleIssueIds: [selectedPolicyTarget()?.id || "consumption_tax_cut"], requiresBudgetReallocationIssueIds: [], notes: ["初期政策案は現実的な財源制約を意識して生成します。"] },
+    };
+  }
   return {
     message: `「${userText}」については、キャッシュ42000の範囲なら服装自由度と公平性を主課題にするのが現実的です。低価格推奨服と相談導線を組み合わせると、自由度を上げつつ格差不安を抑えられます。`,
     recommendedIssueIds: ["uniform"],
@@ -679,6 +689,16 @@ function formatIssueFit(issue) {
 function sampleIssueDetailResponse(issue) {
   const cash = appData.financeMetrics.find((metric) => metric.id === "cash")?.value || 0;
   const metrics = issue.metrics?.join(" / ") || "関連指標未設定";
+  if (isNationalScenario()) {
+    const policyTarget = (appData.policyTargets || []).find((target) => target.id === issue.id) || issue;
+    return {
+      message: `政策「${issue.title}」を選択しました。関連指標は ${metrics} です。推奨ビューは ${(policyTarget.recommendedViews || ["関連指標"]).join(" / ")} で、政策内容に応じて表示軸を切り替えながら影響を確認します。財源上の注意: ${policyTarget.fundingNote || "政策案生成時に確認します。"}`,
+      recommendedIssueIds: [issue.id],
+      reasoning: ["政策ごとに関連指標を優先表示する", "世代別・所得別などの効果軸は固定せず切り替える", "該当性が低い効果軸は理由を表示する"],
+      questionsToUser: ["この政策で声の分析に進みますか？"],
+      financeAssessment: { cashFeasibleIssueIds: [issue.id], requiresBudgetReallocationIssueIds: [], notes: [`短期財源余地${cash}を参考に、財源懸念は警告として扱います。`] },
+    };
+  }
   return {
     message: `「${issue.title}」を選択しました。この課題は ${metrics} に関係し、代表発話からは不便さだけでなく公平感や参加しやすさへの不安も読み取れます。適合度は${formatIssueFit(issue)}%で、今学期のキャッシュ${cash}の範囲で小さく試せる施策に落とし込みやすい候補です。次は、どの属性に効かせるか、運用負担をどこまで許容するか、他の課題も同時に軽くできるかを確認すると施策案に進みやすくなります。`,
     recommendedIssueIds: [issue.id],
@@ -1202,6 +1222,43 @@ function clamp(value, min = 0, max = 100) {
 }
 
 function samplePolicySimulationResult() {
+  if (isNationalScenario()) {
+    const cashUse = appData.policy.cashUse || 0;
+    return {
+      summary: `${appData.policy.title}により、短期的には家計負担感と政策納得度が改善した。一方で、財源補填と社会保障持続性への懸念は長期予想として残る。`,
+      visibleMetricDeltas: {
+        support: 6,
+        happiness: 4,
+        academic: 8,
+        fairness: -3,
+        rule: -11,
+        participation: 2,
+        externalReputation: 0,
+        externalAchievements: 1,
+        teacherSatisfaction: -2,
+        fiscalCapacity: -7,
+        socialSecurity: -4,
+      },
+      hiddenScoreDeltas: {
+        trust: -2,
+        polarization: 3,
+        fatigue: 2,
+        publicValue: -1,
+      },
+      financeDelta: {
+        budget: 0,
+        cash: -cashUse,
+      },
+      groupImpacts: [
+        { groupId: "low_income", summary: "物価負担感の改善を強く実感", scoreDelta: 15 },
+        { groupId: "middle_income", summary: "日用品・食品支出への効果を評価", scoreDelta: 11 },
+        { groupId: "fiscal_conservative", summary: "財源補填が弱い点に反発", scoreDelta: -8 },
+        { groupId: "indifferent", summary: "制度変更の実感が伝われば関心が上がる", scoreDelta: 3 },
+      ],
+      randomEvents: ["物価高への関心が続き、短期的な支持は想定より広がった"],
+      nextIssues: ["財源補填の説明", "社会保障持続性の観測", "時限措置終了時の出口戦略"],
+    };
+  }
   const effects = appData.policy.effects || [];
   const metricDeltas = Object.fromEntries(effects.map((effect) => [effect.label, effect.value]));
   const cashUse = appData.policy.cashUse || 0;
@@ -1370,7 +1427,7 @@ function applySimulationResult(result) {
       ...memoryBefore.timeline,
       {
         turnId,
-        label: `${appData.scenario.termLabel} 施策実行後`,
+        label: `${appData.scenario.termLabel} ${isNationalScenario() ? "政策実行後" : "施策実行後"}`,
         startSnapshot,
         endSnapshot,
         metricDeltas: result.visibleMetricDeltas,
@@ -1402,19 +1459,20 @@ function applySimulationResult(result) {
     ],
     groupMemory,
     memorySummary: {
-      operationPattern: `${memoryBefore.memorySummary.operationPattern} 施策実行後、キャッシュ制約内での小規模改善を優先した。`,
+      operationPattern: `${memoryBefore.memorySummary.operationPattern} ${isNationalScenario() ? "政策実行後、短期効果と長期予想を分けて確認した。" : "施策実行後、キャッシュ制約内での小規模改善を優先した。"}`,
       successfulPolicies: [...memoryBefore.memorySummary.successfulPolicies, appData.policy.title],
       remainingSideEffects: [...new Set([...memoryBefore.memorySummary.remainingSideEffects, ...result.nextIssues])],
       groupRisks: groupMemory.filter((group) => group.frustration > group.support).map((group) => `${group.groupId} の不満が残っている`),
       nextTurnConsiderations: [...new Set([...memoryBefore.memorySummary.nextTurnConsiderations, ...result.nextIssues])],
     },
   };
-  saveStatus = "施策結果をメモリーに追記しました";
+  saveStatus = isNationalScenario() ? "政策実行結果をメモリーに追記しました" : "施策結果をメモリーに追記しました";
 }
 
 async function executePolicyTurn() {
   const result = await simulatePolicyResult();
   applySimulationResult(result);
+  if (isNationalScenario()) activeView = "result";
   App(appData);
 }
 
@@ -1837,6 +1895,94 @@ function MetricTile(metric) {
   `;
 }
 
+function isNationalScenario(data = appData) {
+  return data?.scenario?.id === "national";
+}
+
+function selectedPolicyTarget() {
+  const selectedId = appData.issueSelectionChat?.selectedIssueId;
+  return (appData.policyTargets || appData.issues || []).find((target) => target.id === selectedId) || (appData.policyTargets || appData.issues || [])[0];
+}
+
+function SourceTypeLabel(sourceType) {
+  const labels = {
+    official_stat: "実統計値",
+    official_stat_reference: "実統計参考値",
+    fixed_virtual: "仮想指標",
+    ai_estimated: "AI推定",
+  };
+  return labels[sourceType] || sourceType || "固定値";
+}
+
+function AnalysisViewTabs(active = "related") {
+  const tabs = [
+    ["related", "関連指標"],
+    ["fiscal", "財政"],
+    ["social", "社会影響"],
+    ["international", "国際関係"],
+    ["all", "全体"],
+  ];
+  return `
+    <div class="chart-tabs compact" role="tablist" aria-label="分析ビュー切替">
+      ${tabs.map(([id, label]) => `<button class="${active === id ? "active" : ""}" type="button">${label}</button>`).join("")}
+    </div>
+  `;
+}
+
+function SegmentEffectList(axis) {
+  const effects = appData.segmentEffects?.[axis] || [];
+  if (!effects.length) {
+    return `<div class="empty-note">この政策では、${axis}別の効果は該当性が低いか、まだ生成されていません。</div>`;
+  }
+  return `
+    <div class="segment-effect-list">
+      ${effects
+        .map((effect) => {
+          const score = effect.effectScore === null || effect.effectScore === undefined ? "N/A" : `${effect.effectScore > 0 ? "+" : ""}${effect.effectScore}`;
+          return `
+            <div class="segment-effect-row ${effect.applicability || "applicable"}">
+              <span>${effect.segmentLabel}</span>
+              <strong>${score}</strong>
+              <p>${effect.summary}</p>
+              <small>${effect.applicability === "applicable" ? effect.reason : `該当性が低い: ${effect.reason}`}</small>
+            </div>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+}
+
+function NationalRelationPanel() {
+  const relations = appData.internationalRelations || [];
+  if (!relations.length) return "";
+  return `
+    <article class="panel national-relations-panel">
+      <div class="panel-header">
+        <div>
+          <span class="section-label">国際関係</span>
+          <h2>国・地域クラスター別スコア</h2>
+        </div>
+        <small>政策反応の初期値</small>
+      </div>
+      <div class="relation-grid">
+        ${relations
+          .map(
+            (relation) => `
+              <section class="relation-card">
+                <strong>${relation.label}</strong>
+                <span>関係 ${relation.relationScore}</span>
+                <small>経済依存 ${relation.economicDependency} / 安保感度 ${relation.securitySensitivity}</small>
+                <p>${relation.reactionMemo}</p>
+              </section>
+            `,
+          )
+          .join("")}
+      </div>
+    </article>
+  `;
+}
+
 function metricTone(metric) {
   if (metric.id === "budget") return "good";
   if (metric.id === "cash") {
@@ -1854,6 +2000,25 @@ function metricTone(metric) {
 
 function SimpleDashboard() {
   const visibleMetrics = appData.metrics.filter((metric) => metric.visible);
+  const policyTarget = selectedPolicyTarget();
+  if (isNationalScenario()) {
+    return `
+      <section class="simple-dashboard national-dashboard">
+        <div class="simple-main">
+          <span class="section-label">ダッシュボード</span>
+          <h2>日本の政策判断に使う初期状態</h2>
+          <p>実統計参考値、仮想指標、AI推定を区別しながら、選択政策に関連する指標を優先表示します。</p>
+          ${policyTarget ? `<small>選択政策: ${policyTarget.title} / 推奨ビュー: ${(policyTarget.recommendedViews || []).join("、") || "関連指標"}</small>` : ""}
+        </div>
+        <div class="simple-metrics">${[...appData.financeMetrics, ...visibleMetrics].map(MetricTile).join("")}</div>
+        <article class="annual-report-preview">
+          <span class="section-label">分析ビュー</span>
+          <h3>政策ごとに表示軸を切り替え</h3>
+          ${AnalysisViewTabs("related")}
+        </article>
+      </section>
+    `;
+  }
   return `
     <section class="simple-dashboard">
       <div class="simple-main">
@@ -2226,7 +2391,7 @@ function VoiceAnalysisViewer() {
   return `
     <div class="voice-analysis">
       <div class="analysis-summary">
-        <div><strong>${analysis.populationSize}</strong><span>想定生徒数</span></div>
+        <div><strong>${analysis.populationSize}</strong><span>${isNationalScenario() ? "想定人口" : "想定生徒数"}</span></div>
         <div><strong>${analysis.sampledOpinionCount}</strong><span>分析対象の声</span></div>
         <div><strong>${analysis.clusters.length}</strong><span>意見クラスター</span></div>
       </div>
@@ -2278,6 +2443,36 @@ function IssueList() {
 function IssueSelectionChat(context = "issues") {
   const chat = appData.issueSelectionChat;
   const currentIssue = selectedIssue();
+  if (isNationalScenario()) {
+    const title = context === "analysis" ? "クラスター分析を深掘りする" : "政策効果を確認する";
+    return `
+      <article class="panel issue-chat-panel">
+        <div class="panel-header">
+          <div>
+            <span class="section-label">政策分析チャット</span>
+            <h2>${title}</h2>
+          </div>
+          <small>選択中: ${currentIssue?.title || "未選択"}</small>
+        </div>
+        <div class="chat-thread">
+          ${chat.messages
+            .map(
+              (message) => `
+              <div class="chat-message ${message.role}">
+                <span>${message.role === "user" ? "ユーザー" : "AI"}</span>
+                <p>${message.text}</p>
+              </div>
+            `,
+            )
+            .join("")}
+        </div>
+        <div class="chat-input-preview">
+          <input id="issue-chat-input" type="text" value="この政策で不利益が出やすい層は？" aria-label="政策分析チャット入力" />
+          <button id="issue-chat-send" type="button">送信</button>
+        </div>
+      </article>
+    `;
+  }
   const title = context === "analysis" ? "分析を見ながら課題を明確にする" : "候補を深掘りして選ぶ";
   const placeholder =
     context === "analysis"
@@ -2322,7 +2517,7 @@ function PolicyPreview() {
   return `
     <article class="policy-preview">
       <div>
-        <span class="section-label">今学期の施策案</span>
+        <span class="section-label">${isNationalScenario() ? "政策案" : "今学期の施策案"}</span>
         <h3>${policy.title}</h3>
         <p>${policy.summary || `${policy.covers.join("、")}に同時対応する単一施策。${policy.financePlan}。`}</p>
       </div>
@@ -2330,8 +2525,23 @@ function PolicyPreview() {
         <strong>${policy.budget}</strong>
         <span>予算</span>
       </div>
-      <div class="finance-note">キャッシュ使用: ${policy.cashUse}</div>
+      <div class="finance-note">${isNationalScenario() ? "短期財源使用" : "キャッシュ使用"}: ${policy.cashUse}</div>
       ${hasDraft ? PolicyDetailSections(policy) : ""}
+      ${
+        isNationalScenario()
+          ? `<div class="chart-tabs compact" role="tablist" aria-label="政策案分析ビュー">
+              <button class="active" type="button">所得別</button>
+              <button type="button">世代別</button>
+              <button type="button">クラスター別</button>
+              <button type="button">国際関係</button>
+              <button type="button">財政・実装</button>
+            </div>
+            <div class="policy-target-meta">
+              <div><strong>推奨ビュー</strong><span>所得別 / 世代別 / 財政</span></div>
+              <div><strong>長期影響</strong><span>確定結果ではなく予想として表示</span></div>
+            </div>`
+          : ""
+      }
       <div class="impact-list">
         ${policy.effects
           .map((effect) => `<span class="${effect.tone}">${effect.label} ${effect.value > 0 ? "+" : ""}${effect.value}</span>`)
@@ -2339,14 +2549,14 @@ function PolicyPreview() {
       </div>
       ${
         hasDraft && !policyExecuted
-          ? `<button id="execute-policy" class="primary" type="button">施策を実行して結果を見る</button>`
+          ? `<button id="execute-policy" class="primary" type="button">${isNationalScenario() ? "政策を実行して結果を見る" : "施策を実行して結果を見る"}</button>`
           : hasDraft
-            ? `<div class="turn-complete-note">この学期の施策は実行済みです。</div>`
-            : `<button id="create-policy-draft" class="primary" type="button">選択課題から施策案を作成</button>`
+            ? `<div class="turn-complete-note">${isNationalScenario() ? "この政策は実行済みです。" : "この学期の施策は実行済みです。"}</div>`
+            : `<button id="create-policy-draft" class="primary" type="button">${isNationalScenario() ? "政策案を作成" : "選択課題から施策案を作成"}</button>`
       }
       ${TurnResultPreview()}
-      ${canCreateAnnual ? `<button class="create-annual-report primary" type="button">年度末レポートを作成</button>` : ""}
-      ${appData.annualReport ? `<div class="turn-complete-note">年度末レポート作成済みです。</div>` : ""}
+      ${!isNationalScenario() && canCreateAnnual ? `<button class="create-annual-report primary" type="button">年度末レポートを作成</button>` : ""}
+      ${!isNationalScenario() && appData.annualReport ? `<div class="turn-complete-note">年度末レポート作成済みです。</div>` : ""}
     </article>
   `;
 }
@@ -2400,7 +2610,7 @@ function PolicyRevisionChat() {
       <div class="panel-header">
         <div>
           <span class="section-label">施策修正チャット</span>
-          <h2>施策案を深掘りして調整</h2>
+          <h2>${isNationalScenario() ? "政策案を深掘りして調整" : "施策案を深掘りして調整"}</h2>
         </div>
         <small>${hasDraft ? "編集中" : "施策案未作成"}</small>
       </div>
@@ -2417,7 +2627,7 @@ function PolicyRevisionChat() {
           .join("")}
       </div>
       <div class="chat-input-preview">
-        <input id="policy-chat-input" type="text" value="${hasDraft ? "懸念が大きい属性への補完策を入れてください" : "まず施策案を作成してください"}" aria-label="施策修正チャット入力" ${hasDraft ? "" : "disabled"} />
+        <input id="policy-chat-input" type="text" value="${hasDraft ? (isNationalScenario() ? "財源懸念を抑える補完策を入れてください" : "懸念が大きい属性への補完策を入れてください") : "まず政策案を作成してください"}" aria-label="政策案チャット入力" ${hasDraft ? "" : "disabled"} />
         <button id="policy-chat-send" type="button" ${hasDraft ? "" : "disabled"}>送信</button>
       </div>
     </article>
@@ -2430,7 +2640,7 @@ function TurnResultPreview() {
     return `
       <div class="turn-result-preview empty">
         <span>実行結果</span>
-        <p>施策実行後、AIシミュレーション結果を指標・財務・属性メモリーへ反映します。</p>
+        <p>${isNationalScenario() ? "政策実行後、短期結果・長期予想・クラスター別影響を表示します。" : "施策実行後、AIシミュレーション結果を指標・財務・属性メモリーへ反映します。"}</p>
       </div>
     `;
   }
@@ -2445,7 +2655,7 @@ function TurnResultPreview() {
         <b>cash ${result.financeDelta.cash > 0 ? "+" : ""}${result.financeDelta.cash}</b>
       </div>
       <small>${result.randomEvents.join(" / ")}</small>
-      ${currentTurn().term >= 3 ? `<span class="turn-end-label">年度末処理へ進めます</span>` : `<button id="advance-turn" type="button">次学期へ進む</button>`}
+      ${isNationalScenario() ? `<span class="turn-end-label">単発実行は完了しました</span>` : currentTurn().term >= 3 ? `<span class="turn-end-label">年度末処理へ進めます</span>` : `<button id="advance-turn" type="button">次学期へ進む</button>`}
     </div>
   `;
 }
@@ -2487,6 +2697,60 @@ function PolicyHistoryCard(record, index) {
 }
 
 function DashboardView() {
+  if (isNationalScenario()) {
+    return `
+      ${SimpleDashboard()}
+      <section class="overview-grid national-overview">
+        <article class="panel trend-panel">
+          <div class="panel-header">
+            <div>
+              <span class="section-label">政策関連指標</span>
+              <h2>選択政策に関連する指標</h2>
+            </div>
+            <small>relatedMetricIds</small>
+          </div>
+          ${AnalysisViewTabs("related")}
+          <div class="metric-detail-list">
+            ${appData.metrics
+              .filter((metric) => (selectedPolicyTarget()?.relatedMetricIds || []).includes(metric.id) || metric.visible)
+              .slice(0, 8)
+              .map(
+                (metric) => `
+                  <div class="metric-detail-row ${metricTone(metric)}">
+                    <strong>${metric.label}</strong>
+                    <span>${metric.value}${metric.unit || ""}</span>
+                    <small>${SourceTypeLabel(metric.sourceType)} / ${metric.baseYear || appData.scenario.baseYear || "-"}</small>
+                    <p>${metric.description || ""}</p>
+                  </div>
+                `,
+              )
+              .join("")}
+          </div>
+        </article>
+        <article class="panel sentiment-panel">
+          <div class="panel-header">
+            <div>
+              <span class="section-label">人口・属性</span>
+              <h2>国民属性の反応分布</h2>
+            </div>
+          </div>
+          ${SentimentRows()}
+        </article>
+        <article class="panel trend-panel">
+          <div class="panel-header">
+            <div>
+              <span class="section-label">推移</span>
+              <h2>政策納得度・生活満足度・公平感</h2>
+            </div>
+          </div>
+          ${LineChart()}
+          <div class="legend"><span class="support">政策納得度</span><span class="happiness">生活満足度</span><span class="fairness">世代間公平感</span></div>
+        </article>
+        ${HiddenScorePanel()}
+        ${NationalRelationPanel()}
+      </section>
+    `;
+  }
   return `
     ${SimpleDashboard()}
     <section class="overview-grid">
@@ -2527,6 +2791,51 @@ function DashboardView() {
 }
 
 function VoicesView() {
+  if (isNationalScenario()) {
+    return `
+      <section class="single-view">
+        <article class="panel voice-panel">
+          <div class="panel-header">
+            <div>
+              <span class="section-label">声の分析</span>
+              <h2>国民・ステークホルダーの反応</h2>
+            </div>
+            <small>${appData.voiceAnalysis?.sampledOpinionCount || appData.voices.length}件から代表例</small>
+          </div>
+          ${VoiceAnalysisViewer()}
+        </article>
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <span class="section-label">効果軸切替</span>
+              <h2>政策内容に応じた推奨ビュー</h2>
+            </div>
+            <small>recommendedViews</small>
+          </div>
+          <div class="chart-tabs compact" role="tablist" aria-label="効果軸切替">
+            <button class="active" type="button">所得別</button>
+            <button type="button">世代別</button>
+            <button type="button">地域別</button>
+            <button type="button">国際関係</button>
+          </div>
+          <div class="effect-grid">
+            <section>
+              <h3>所得別の想定効果</h3>
+              ${SegmentEffectList("income")}
+            </section>
+            <section>
+              <h3>世代別の想定効果</h3>
+              ${SegmentEffectList("generation")}
+            </section>
+            <section>
+              <h3>関連が薄い効果軸</h3>
+              ${SegmentEffectList("international")}
+            </section>
+          </div>
+        </article>
+      </section>
+    `;
+  }
   return `
     <section class="single-view">
       <article class="panel voice-panel">
@@ -2545,6 +2854,39 @@ function VoicesView() {
 }
 
 function IssuesView() {
+  if (isNationalScenario()) {
+    const policyTarget = selectedPolicyTarget();
+    return `
+      <section class="two-column-view">
+        <article class="panel issue-panel">
+          <div class="panel-header">
+            <div>
+              <span class="section-label">政策ターゲット</span>
+              <h2>分析対象の政策を選ぶ</h2>
+            </div>
+            <small>MVPプリセット</small>
+          </div>
+          <div class="issue-list">${IssueList()}</div>
+        </article>
+        <article class="panel issue-chat-panel">
+          <div class="panel-header">
+            <div>
+              <span class="section-label">AI構造化結果</span>
+              <h2>${policyTarget?.title || "政策未選択"}</h2>
+            </div>
+            <small>${policyTarget?.field || "AI生成分野"}</small>
+          </div>
+          <p>${policyTarget?.summary || ""}</p>
+          <div class="policy-target-meta">
+            <div><strong>関連指標</strong><span>${(policyTarget?.metrics || []).join(" / ")}</span></div>
+            <div><strong>推奨ビュー</strong><span>${(policyTarget?.recommendedViews || []).join(" / ")}</span></div>
+            <div><strong>財源上の注意</strong><span>${policyTarget?.fundingNote || "政策案生成時に確認"}</span></div>
+          </div>
+          ${IssueSelectionChat()}
+        </article>
+      </section>
+    `;
+  }
   return `
     <section class="two-column-view">
       <article class="panel issue-panel">
@@ -2572,6 +2914,53 @@ function PolicyView() {
 }
 
 function ResultView() {
+  if (isNationalScenario()) {
+    const result = appData.lastSimulationResult;
+    return `
+      <section class="result-view">
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <span class="section-label">実行結果</span>
+              <h2>短期結果と長期予想</h2>
+            </div>
+            <small>単発実行</small>
+          </div>
+          ${TurnResultPreview()}
+          <div class="chart-tabs compact" role="tablist" aria-label="実行結果ビュー切替">
+            <button class="active" type="button">関連指標</button>
+            <button type="button">所得別</button>
+            <button type="button">世代別</button>
+            <button type="button">国際関係</button>
+          </div>
+          <div class="effect-grid">
+            <section>
+              <h3>所得別の短期効果</h3>
+              ${SegmentEffectList("income")}
+            </section>
+            <section>
+              <h3>世代別の短期効果</h3>
+              ${SegmentEffectList("generation")}
+            </section>
+          </div>
+        </article>
+        ${NationalRelationPanel()}
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <span class="section-label">長期予想</span>
+              <h2>確定結果ではなく観測対象</h2>
+            </div>
+          </div>
+          <div class="policy-target-meta">
+            <div><strong>長期リスク</strong><span>恒久化した場合、財政余力と社会保障持続性が低下する可能性があります。</span></div>
+            <div><strong>観測すべき指標</strong><span>税収、消費動向、社会保障財源、政策納得度、将来世代への負担感。</span></div>
+            <div><strong>変動要因</strong><span>物価、賃金、景気循環、国際的な金融環境。</span></div>
+          </div>
+        </article>
+      </section>
+    `;
+  }
   return `
     <section class="result-view">
       <article class="panel">
@@ -2762,19 +3151,20 @@ function NavLink(view, label, iconName) {
 function App(data) {
   appData = data;
   const turn = currentTurn();
+  const national = isNationalScenario();
   document.querySelector("#app").innerHTML = `
     <div class="app-shell">
       <aside class="sidebar">
         <div class="brand">
-          <span>学</span>
-          <strong>School Democracy Lab</strong>
+          <span>${national ? "政" : "学"}</span>
+          <strong>${national ? "Japan Policy Lab" : "School Democracy Lab"}</strong>
         </div>
         <nav>
           ${NavLink("dashboard", "ダッシュボード", "dashboard")}
           ${NavLink("voices", "声の分析", "voices")}
-          ${NavLink("issues", "課題設定", "issue")}
-          ${NavLink("policy", "施策検討", "policy")}
-          ${NavLink("result", "結果", "result")}
+          ${NavLink("issues", national ? "政策ターゲット" : "課題設定", "issue")}
+          ${NavLink("policy", national ? "政策案" : "施策検討", "policy")}
+          ${NavLink("result", national ? "実行結果" : "結果", "result")}
           <a id="save-settings" href="#">${icon("save")}<span>保存</span></a>
         </nav>
       </aside>
@@ -2782,22 +3172,22 @@ function App(data) {
       <main>
         <header class="topbar">
           <div>
-            <div class="term-badge"><span>現在</span><strong>${turn.year}年目 ${termLabel(turn)}</strong></div>
-            <h1>学園自治シミュレーター</h1>
-            <p>${appData.scenario.termLabel}開始時点の指標から、生徒の声と課題候補をAIで抽出します。</p>
+            <div class="term-badge"><span>${national ? "基準" : "現在"}</span><strong>${national ? `${appData.scenario.baseYear || 2025}年 / ${termLabel(turn)}` : `${turn.year}年目 ${termLabel(turn)}`}</strong></div>
+            <h1>${appData.scenario.title || (national ? "国版 政策シミュレーター" : "学園自治シミュレーター")}</h1>
+            <p>${national ? "対象政策に応じて、関連指標・国民の声・効果軸を切り替えながら単発政策の影響を確認します。" : `${appData.scenario.termLabel}開始時点の指標から、生徒の声と課題候補をAIで抽出します。`}</p>
           </div>
           <div class="top-actions">
             <div class="view-switch" aria-label="ダッシュボード表示切替">
-              <button class="active" type="button">簡易</button>
-              <button type="button">詳細</button>
+              <button class="active" type="button">${national ? "関連指標" : "簡易"}</button>
+              <button type="button">${national ? "全体" : "詳細"}</button>
             </div>
             <button id="ai-settings" type="button">AI設定</button>
-            <button id="ai-initialize" class="primary" type="button" ${hasAiConnection() ? "" : "disabled"}>AIで初期化</button>
+            <button id="ai-initialize" class="primary" type="button" ${hasAiConnection() ? "" : "disabled"}>${national ? "AIで政策分析" : "AIで初期化"}</button>
           </div>
         </header>
 
         <div class="ai-status ${hasAiConnection() ? "connected" : ""}">
-          AI: ${aiStatusText()}。公開Webでは利用者のAPIキー、ローカルではCodex App Serverも選べます。
+          AI: ${aiStatusText()}。${national ? "まずは固定モックデータで動作確認し、後続で実AI接続へ切り替えます。" : "公開Webでは利用者のAPIキー、ローカルではCodex App Serverも選べます。"}
           ${aiNotice ? `<div class="ai-warning">${aiNotice}</div>` : ""}
         </div>
         ${ActiveView()}
@@ -2870,7 +3260,7 @@ function SaveModal() {
         </div>
         <p>DBは使わず、ブラウザ内キャッシュとJSONファイルでシミュレーション状態を保持します。APIキーやCodex認証情報は保存データに含めません。</p>
         <div class="memory-summary-grid">
-          <div><strong>${timelineCount}</strong><span>学期スナップショット</span></div>
+          <div><strong>${timelineCount}</strong><span>${isNationalScenario() ? "政策スナップショット" : "学期スナップショット"}</span></div>
           <div><strong>${eventCount}</strong><span>イベントログ</span></div>
           <div><strong>${groupCount}</strong><span>属性メモリー</span></div>
         </div>
