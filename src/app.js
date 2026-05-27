@@ -3253,22 +3253,12 @@ function PolicyPreview() {
   const canCreateAnnual = policyExecuted && currentTurn().term >= 3 && !appData.annualReport;
   const availableCash = appData.financeMetrics.find((metric) => metric.id === "cash")?.value || policy.cashUse || 1;
   const budgetAngle = Math.min(360, Math.round((policy.cashUse / Math.max(availableCash, 1)) * 270));
-  const nationalPolicyAction = isNationalScenario()
-    ? hasDraft && !policyExecuted
-      ? `<button id="execute-policy" class="primary-button" type="button">政策を実行して結果を見る</button>`
-      : hasDraft
-        ? `<div class="turn-complete-note compact">この政策は実行済みです。</div>`
-        : ""
-    : "";
   return `
     <article class="policy-preview">
-      <div class="policy-preview-header">
-        <div>
-          <span class="section-label">${isNationalScenario() ? "政策案" : "今学期の施策案"}</span>
-          <h3>${policy.title}</h3>
-          <p>${policy.summary || `${policy.covers.join("、")}に同時対応する単一施策。${policy.financePlan}。`}</p>
-        </div>
-        ${nationalPolicyAction}
+      <div>
+        <span class="section-label">${isNationalScenario() ? "政策案" : "今学期の施策案"}</span>
+        <h3>${policy.title}</h3>
+        <p>${policy.summary || `${policy.covers.join("、")}に同時対応する単一施策。${policy.financePlan}。`}</p>
       </div>
       <div class="budget-ring" style="--value:${budgetAngle}deg">
         <strong>${policy.budget}</strong>
@@ -3697,37 +3687,43 @@ function IssuesView() {
   if (isNationalScenario()) {
     const policyTarget = selectedPolicyTarget();
     return `
-      <section class="two-column-view">
-        <article class="panel issue-panel">
-          <div class="panel-header">
-            <div>
-              <span class="section-label">政策ターゲット</span>
-              <h2>分析対象の政策を選ぶ</h2>
-            </div>
-            <small>MVPプリセット / 自由記述</small>
+      <section class="national-workflow-view">
+        <div class="section-head">
+          <div>
+            <h2>政策ターゲット</h2>
+            <p>分析対象の政策を指定し、仮想の声データと初期政策案を生成します。</p>
           </div>
-          <div class="issue-list">${IssueList()}</div>
-          ${FreePolicyTargetForm()}
-        </article>
-        <article class="panel issue-chat-panel">
-          <div class="panel-header">
-            <div>
-              <span class="section-label">AI構造化結果</span>
-              <h2>${policyTarget?.title || "政策未選択"}</h2>
+          <button id="generate-target-analysis" class="primary-button" type="button" ${policyTarget ? "" : "disabled"}>声の分析へ進む</button>
+        </div>
+        <div class="two-column-view">
+          <article class="panel issue-panel">
+            <div class="panel-header">
+              <div>
+                <span class="section-label">政策ターゲット</span>
+                <h2>分析対象の政策を選ぶ</h2>
+              </div>
+              <small>MVPプリセット / 自由記述</small>
             </div>
-            <div class="panel-header-action">
-              <button id="generate-target-analysis" class="primary-button" type="button" ${policyTarget ? "" : "disabled"}>声の分析へ進む</button>
+            <div class="issue-list">${IssueList()}</div>
+            ${FreePolicyTargetForm()}
+          </article>
+          <article class="panel issue-chat-panel">
+            <div class="panel-header">
+              <div>
+                <span class="section-label">AI構造化結果</span>
+                <h2>${policyTarget?.title || "政策未選択"}</h2>
+              </div>
               <small>${policyTarget?.field || "AI生成分野"}</small>
             </div>
-          </div>
-          <p>${policyTarget?.summary || ""}</p>
-          <div class="policy-target-meta">
-            <div><strong>関連指標</strong><span>${(policyTarget?.metrics || []).join(" / ")}</span></div>
-            <div><strong>推奨ビュー</strong><span>${(policyTarget?.recommendedViews || []).join(" / ")}</span></div>
-            <div><strong>財源上の注意</strong><span>${policyTarget?.fundingNote || "政策案生成時に確認"}</span></div>
-          </div>
-          ${IssueSelectionChat()}
-        </article>
+            <p>${policyTarget?.summary || ""}</p>
+            <div class="policy-target-meta">
+              <div><strong>関連指標</strong><span>${(policyTarget?.metrics || []).join(" / ")}</span></div>
+              <div><strong>推奨ビュー</strong><span>${(policyTarget?.recommendedViews || []).join(" / ")}</span></div>
+              <div><strong>財源上の注意</strong><span>${policyTarget?.fundingNote || "政策案生成時に確認"}</span></div>
+            </div>
+            ${IssueSelectionChat()}
+          </article>
+        </div>
       </section>
     `;
   }
@@ -3749,6 +3745,25 @@ function IssuesView() {
 }
 
 function PolicyView() {
+  if (isNationalScenario()) {
+    const hasDraft = appData.policy?.effects?.length > 0;
+    const policyExecuted = Boolean(appData.lastSimulationResult);
+    return `
+      <section class="national-workflow-view">
+        <div class="section-head">
+          <div>
+            <h2>政策案</h2>
+            <p>生成済みの初期政策案を、コスト・実施内容・効果・対象属性に分けて確認します。</p>
+          </div>
+          ${hasDraft && !policyExecuted ? `<button id="execute-policy" class="primary-button" type="button">政策を実行して結果を見る</button>` : ""}
+        </div>
+        <div class="two-column-view">
+          ${PolicyPreview()}
+          ${PolicyRevisionChat()}
+        </div>
+      </section>
+    `;
+  }
   return `
     <section class="two-column-view">
       ${PolicyPreview()}
