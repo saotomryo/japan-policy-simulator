@@ -2678,6 +2678,167 @@ function ResultEffectContent(axis = activeResultEffectAxis) {
   `;
 }
 
+function resultDeltaEntries(result = appData.lastSimulationResult) {
+  if (!result) return [];
+  return Object.entries(result.visibleMetricDeltas || {}).map(([id, delta]) => ({
+    id,
+    delta,
+    label: metricLabel(id),
+    value: appData.metrics.find((metric) => metric.id === id)?.value || 0,
+  }));
+}
+
+function resultTopImpacts(result = appData.lastSimulationResult, limit = 5) {
+  return resultDeltaEntries(result)
+    .filter((entry) => entry.delta)
+    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+    .slice(0, limit);
+}
+
+function ResultImpactBar(entry) {
+  const width = Math.min(100, Math.max(8, Math.abs(entry.delta) * 8));
+  const tone = entry.delta >= 0 ? "good" : "warn";
+  return `
+    <div class="report-bar-row ${tone}">
+      <span>${entry.label}</span>
+      <div class="report-bar-track"><b style="width:${width}%"></b></div>
+      <strong>${entry.delta > 0 ? "+" : ""}${entry.delta}</strong>
+    </div>
+  `;
+}
+
+function ResultGroupImpactBar(impact) {
+  const width = Math.min(100, Math.max(8, Math.abs(impact.scoreDelta || 0) * 5));
+  const tone = impact.scoreDelta >= 0 ? "good" : "warn";
+  return `
+    <div class="report-bar-row ${tone}">
+      <span>${groupLabel(impact.groupId)}</span>
+      <div class="report-bar-track"><b style="width:${width}%"></b></div>
+      <strong>${impact.scoreDelta > 0 ? "+" : ""}${impact.scoreDelta}</strong>
+      <small>${impact.summary}</small>
+    </div>
+  `;
+}
+
+function resultDetailSections(result = appData.lastSimulationResult) {
+  const impacts = resultTopImpacts(result, 4);
+  const groupImpacts = [...(result?.groupImpacts || [])].sort((a, b) => Math.abs(b.scoreDelta || 0) - Math.abs(a.scoreDelta || 0));
+  const fiscalImpact = resultDeltaEntries(result).filter((entry) => ["fiscalCapacity", "socialSecurity", "rule"].includes(entry.id));
+  const industryImpact = resultDeltaEntries(result).filter((entry) => entry.id.includes("Industry") || ["manufacturingImpact", "agricultureImpact", "economicRipple"].includes(entry.id));
+  return [
+    {
+      title: "家計・国民生活への短期影響",
+      body: "短期では、家計の負担感と政策納得度の改善が最も見えやすい結果になりました。低所得層と中間層では支出に占める生活必需品の比率が高いため、政策効果の体感が早く出ます。一方で、制度の開始時期や対象範囲が伝わりにくい層では、実感が支持に転換するまで時間差が残ります。",
+      entries: impacts.filter((entry) => ["support", "happiness", "academic", "economicRipple"].includes(entry.id)),
+    },
+    {
+      title: "財政・社会保障への副作用",
+      body: "政策実行により短期的な可処分所得は改善しますが、財政余力と社会保障財源には下押し圧力が出ます。ここは確定的な失敗ではなく、補填財源、時限措置の出口、恒久化しない条件をどれだけ明確にできるかで長期予想が変わる領域です。",
+      entries: fiscalImpact,
+    },
+    {
+      title: "産業・実務面への波及",
+      body: "需要下支えの効果は小売、輸入、製造、農業などへ分散して出ます。ただし金融や行政実務では、制度変更への対応、資金繰り、説明コストが増える可能性があります。産業別の効果差は、次の政策修正で優先的に確認すべき論点です。",
+      entries: industryImpact,
+    },
+    {
+      title: "国民・ステークホルダー別の反応",
+      body: "属性別には、便益を直接受ける層で支持が伸びる一方、財政規律を重視する層では警戒が残ります。無関心層は政策の良し悪しよりも、いつ何が変わるかの説明で反応が左右されるため、広報と手続きの簡素化が重要です。",
+      groupEntries: groupImpacts,
+    },
+  ];
+}
+
+function NationalResultReport() {
+  const result = appData.lastSimulationResult;
+  if (!result) {
+    return `
+      <section class="national-result-report">
+        ${EmptyWorkflowPanel("実行結果は未生成", "政策案画面で政策を実行すると、短期結果・長期予想・属性別影響を詳細レポートとして表示します。", "政策案へ進む")}
+      </section>
+    `;
+  }
+  const topImpacts = resultTopImpacts(result, 6);
+  const detailSections = resultDetailSections(result);
+  const cashDelta = result.financeDelta?.cash || 0;
+  return `
+    <section class="national-result-report">
+      <article class="panel result-report-hero">
+        <div class="panel-header">
+          <div>
+            <span class="section-label">実行結果レポート</span>
+            <h2>${appData.policy.title}</h2>
+          </div>
+          <small>単発実行 / 詳細版</small>
+        </div>
+        <div class="report-summary-grid">
+          <div>
+            <h3>全体のまとめ</h3>
+            <p>${result.summary}</p>
+            <p>今回の実行では、短期的な生活負担の軽減と政策納得度の上昇が中心的な成果です。政策の便益は広く出る一方で、財政余力、社会保障財源、制度終了時の出口戦略に関する説明責任が残ります。したがって、この結果は「短期効果は確認できたが、長期は財源補填と制度設計の精度に依存する」という位置づけで読むべきです。</p>
+          </div>
+          <div class="report-score-card">
+            <strong>${topImpacts[0]?.delta > 0 ? "+" : ""}${topImpacts[0]?.delta || 0}</strong>
+            <span>最大変動: ${topImpacts[0]?.label || "なし"}</span>
+            <small>短期財源使用 ${cashDelta.toLocaleString("ja-JP")}</small>
+          </div>
+        </div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-header">
+          <div>
+            <span class="section-label">可視化</span>
+            <h2>影響の大きい指標</h2>
+          </div>
+        </div>
+        <div class="report-chart-grid">
+          <section>
+            <h3>主要指標の変化</h3>
+            <div class="report-bar-list">${topImpacts.map(ResultImpactBar).join("")}</div>
+          </section>
+          <section>
+            <h3>属性別の反応</h3>
+            <div class="report-bar-list">${(result.groupImpacts || []).map(ResultGroupImpactBar).join("")}</div>
+          </section>
+        </div>
+      </article>
+
+      <div class="result-report-sections">
+        ${detailSections
+          .map(
+            (section) => `
+              <article class="panel report-detail-section">
+                <h3>${section.title}</h3>
+                <p>${section.body}</p>
+                ${
+                  section.entries?.length
+                    ? `<div class="report-bar-list compact">${section.entries.map(ResultImpactBar).join("")}</div>`
+                    : `<div class="report-bar-list compact">${(section.groupEntries || []).map(ResultGroupImpactBar).join("")}</div>`
+                }
+              </article>
+            `,
+          )
+          .join("")}
+      </div>
+
+      <article class="panel">
+        <div class="panel-header">
+          <div>
+            <span class="section-label">長期予想</span>
+            <h2>確定結果ではなく観測対象</h2>
+          </div>
+        </div>
+        <div class="policy-target-meta">
+          <div><strong>長期リスク</strong><span>恒久化した場合、財政余力と社会保障持続性が低下する可能性があります。</span></div>
+          <div><strong>観測すべき指標</strong><span>${(result.nextIssues || []).join("、") || "税収、消費動向、社会保障財源、政策納得度、将来世代への負担感。"}</span></div>
+          <div><strong>変動要因</strong><span>物価、賃金、景気循環、国際的な金融環境、制度終了時の政治圧力。</span></div>
+        </div>
+      </article>
+    </section>
+  `;
+}
+
 function metricTone(metric) {
   if (metric.id === "budget") return "good";
   if (metric.id === "cash") {
@@ -3774,37 +3935,16 @@ function PolicyView() {
 
 function ResultView() {
   if (isNationalScenario()) {
-    const result = appData.lastSimulationResult;
     return `
-      <section class="result-view">
-        <article class="panel">
-          <div class="panel-header">
-            <div>
-              <span class="section-label">実行結果</span>
-              <h2>短期結果と長期予想</h2>
-            </div>
-            <small>単発実行</small>
+      <section class="national-workflow-view">
+        <div class="section-head">
+          <div>
+            <h2>実行結果</h2>
+            <p>単発政策の短期結果と長期予想を、年度レポート形式で詳しく確認します。</p>
           </div>
-          ${TurnResultPreview()}
-          ${EffectAxisTabs(activeResultEffectAxis, "resultEffectAxis", { includeRelated: true })}
-          <div class="effect-grid">
-            ${ResultEffectContent(activeResultEffectAxis)}
-          </div>
-        </article>
-        ${NationalRelationPanel()}
-        <article class="panel">
-          <div class="panel-header">
-            <div>
-              <span class="section-label">長期予想</span>
-              <h2>確定結果ではなく観測対象</h2>
-            </div>
-          </div>
-          <div class="policy-target-meta">
-            <div><strong>長期リスク</strong><span>恒久化した場合、財政余力と社会保障持続性が低下する可能性があります。</span></div>
-            <div><strong>観測すべき指標</strong><span>税収、消費動向、社会保障財源、政策納得度、将来世代への負担感。</span></div>
-            <div><strong>変動要因</strong><span>物価、賃金、景気循環、国際的な金融環境。</span></div>
-          </div>
-        </article>
+          <span class="status-pill">詳細レポート</span>
+        </div>
+        ${NationalResultReport()}
       </section>
     `;
   }

@@ -2022,6 +2022,127 @@ button:disabled {
   align-items: start;
 }
 
+.national-result-report {
+  display: grid;
+  gap: 16px;
+}
+
+.result-report-hero {
+  gap: 18px;
+}
+
+.report-summary-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: 18px;
+  align-items: stretch;
+}
+
+.report-summary-grid h3,
+.report-chart-grid h3,
+.report-detail-section h3 {
+  margin-bottom: 8px;
+  font-size: 17px;
+}
+
+.report-summary-grid p,
+.report-detail-section p {
+  margin: 0 0 10px;
+  color: #334144;
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.report-score-card {
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  padding: 18px;
+  border-radius: 10px;
+  background: #eef8f8;
+  color: var(--brand);
+}
+
+.report-score-card strong {
+  font-size: 44px;
+  line-height: 1;
+}
+
+.report-score-card span,
+.report-score-card small {
+  color: #526272;
+  font-weight: 900;
+}
+
+.report-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.report-bar-list {
+  display: grid;
+  gap: 9px;
+}
+
+.report-bar-list.compact {
+  margin-top: 12px;
+}
+
+.report-bar-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.9fr) minmax(160px, 1.4fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.report-bar-row small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.5;
+}
+
+.report-bar-row span {
+  color: #1b252e;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.report-bar-row strong {
+  color: var(--brand);
+  font-size: 14px;
+}
+
+.report-bar-row.warn strong {
+  color: var(--warning);
+}
+
+.report-bar-track {
+  height: 11px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e6eef3;
+}
+
+.report-bar-track b {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--brand);
+}
+
+.report-bar-row.warn .report-bar-track b {
+  background: var(--warning);
+}
+
+.result-report-sections {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
 .policy-history-list {
   display: grid;
   gap: 12px;
@@ -2217,7 +2338,10 @@ button:disabled {
   .workbench,
   .two-column-view,
   .dashboard-layout,
-  .result-view {
+  .result-view,
+  .report-summary-grid,
+  .report-chart-grid,
+  .result-report-sections {
     grid-template-columns: 1fr;
   }
 
@@ -2320,6 +2444,10 @@ button:disabled {
 
   .policy-panel-tabs {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .report-bar-row {
+    grid-template-columns: 1fr;
   }
 
   .cost-summary-grid,
