@@ -3148,45 +3148,91 @@ function NavLink(view, label, iconName) {
   return `<a class="${activeView === view ? "active" : ""}" href="#" data-view="${view}">${icon(iconName)}<span>${label}</span></a>`;
 }
 
+function NationalNavLink(view, label) {
+  return `<a class="${activeView === view ? "active" : ""}" href="#" data-view="${view}"><span>${label}</span></a>`;
+}
+
 function App(data) {
   appData = data;
   const turn = currentTurn();
   const national = isNationalScenario();
+  const statusTitle = appData.scenario.selectedPolicyTitle || appData.policy?.title || "政策未選択";
   document.querySelector("#app").innerHTML = `
-    <div class="app-shell">
+    <div class="app-shell ${national ? "national-shell" : ""}">
       <aside class="sidebar">
         <div class="brand">
-          <span>${national ? "政" : "学"}</span>
-          <strong>${national ? "Japan Policy Lab" : "School Democracy Lab"}</strong>
+          <span class="brand-mark">${national ? "政" : "学"}</span>
+          <div class="brand-copy">
+            <strong>${national ? "政策シミュレーター" : "School Democracy Lab"}</strong>
+            ${national ? "<small>Japan Policy Lab</small>" : ""}
+          </div>
         </div>
-        <nav>
-          ${NavLink("dashboard", "ダッシュボード", "dashboard")}
-          ${NavLink("voices", "声の分析", "voices")}
-          ${NavLink("issues", national ? "政策ターゲット" : "課題設定", "issue")}
-          ${NavLink("policy", national ? "政策案" : "施策検討", "policy")}
-          ${NavLink("result", national ? "実行結果" : "結果", "result")}
-          <a id="save-settings" href="#">${icon("save")}<span>保存</span></a>
+        <nav class="${national ? "nav-tabs" : ""}">
+          ${
+            national
+              ? `
+                ${NationalNavLink("dashboard", "ダッシュボード")}
+                ${NationalNavLink("issues", "政策ターゲット")}
+                ${NationalNavLink("voices", "声の分析")}
+                ${NationalNavLink("policy", "政策案")}
+                ${NationalNavLink("result", "実行結果")}
+              `
+              : `
+                ${NavLink("dashboard", "ダッシュボード", "dashboard")}
+                ${NavLink("voices", "声の分析", "voices")}
+                ${NavLink("issues", "課題設定", "issue")}
+                ${NavLink("policy", "施策検討", "policy")}
+                ${NavLink("result", "結果", "result")}
+                <a id="save-settings" href="#">${icon("save")}<span>保存</span></a>
+              `
+          }
         </nav>
+        ${
+          national
+            ? `
+              <div class="sidebar-actions">
+                <a id="save-settings" href="#">保存</a>
+                <button id="ai-settings" type="button">AI設定</button>
+              </div>
+            `
+            : ""
+        }
       </aside>
 
       <main>
         <header class="topbar">
           <div>
-            <div class="term-badge"><span>${national ? "基準" : "現在"}</span><strong>${national ? `${appData.scenario.baseYear || 2025}年 / ${termLabel(turn)}` : `${turn.year}年目 ${termLabel(turn)}`}</strong></div>
+            ${
+              national
+                ? `<p class="screen-kicker">MVP screen mock</p>`
+                : `<div class="term-badge"><span>現在</span><strong>${turn.year}年目 ${termLabel(turn)}</strong></div>`
+            }
             <h1>${appData.scenario.title || (national ? "国版 政策シミュレーター" : "学園自治シミュレーター")}</h1>
             <p>${national ? "対象政策に応じて、関連指標・国民の声・効果軸を切り替えながら単発政策の影響を確認します。" : `${appData.scenario.termLabel}開始時点の指標から、生徒の声と課題候補をAIで抽出します。`}</p>
           </div>
-          <div class="top-actions">
-            <div class="view-switch" aria-label="ダッシュボード表示切替">
-              <button class="active" type="button">${national ? "関連指標" : "簡易"}</button>
-              <button type="button">${national ? "全体" : "詳細"}</button>
-            </div>
-            <button id="ai-settings" type="button">AI設定</button>
-            <button id="ai-initialize" class="primary" type="button" ${hasAiConnection() ? "" : "disabled"}>${national ? "AIで政策分析" : "AIで初期化"}</button>
-          </div>
+          ${
+            national
+              ? `
+                <div class="status-strip" aria-label="進行状態">
+                  <span>基準年 ${appData.scenario.baseYear || 2025}</span>
+                  <span>${appData.scenario.status || "政策検討中"}</span>
+                  <strong>${statusTitle}</strong>
+                </div>
+              `
+              : `
+                <div class="top-actions">
+                  <div class="view-switch" aria-label="ダッシュボード表示切替">
+                    <button class="active" type="button">簡易</button>
+                    <button type="button">詳細</button>
+                  </div>
+                  <button id="ai-settings" type="button">AI設定</button>
+                  <button id="ai-initialize" class="primary" type="button" ${hasAiConnection() ? "" : "disabled"}>AIで初期化</button>
+                </div>
+              `
+          }
         </header>
 
-        <div class="ai-status ${hasAiConnection() ? "connected" : ""}">
+        <div class="ai-status ${national ? "national-ai-status" : ""} ${hasAiConnection() ? "connected" : ""}">
           AI: ${aiStatusText()}。${national ? "まずは固定モックデータで動作確認し、後続で実AI接続へ切り替えます。" : "公開Webでは利用者のAPIキー、ローカルではCodex App Serverも選べます。"}
           ${aiNotice ? `<div class="ai-warning">${aiNotice}</div>` : ""}
         </div>
