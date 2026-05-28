@@ -2,6 +2,7 @@ import http from "node:http";
 
 const bridgePort = Number(process.env.CODEX_AI_BRIDGE_PORT || 45124);
 const codexUrl = process.env.CODEX_APP_SERVER_URL || "ws://127.0.0.1:45123";
+const codexRequestTimeoutMs = Number(process.env.CODEX_AI_BRIDGE_TIMEOUT_MS || 900000);
 
 function sendJson(response, status, body) {
   response.writeHead(status, {
@@ -95,8 +96,8 @@ function codexRequest({ schemaName, prompt, schema, model }) {
     const rawItems = [];
     const timeout = setTimeout(() => {
       socket.close();
-      reject(new Error("Codex app server request timed out"));
-    }, 120000);
+      reject(new Error(`Codex app server request timed out after ${Math.round(codexRequestTimeoutMs / 60000)} minutes`));
+    }, codexRequestTimeoutMs);
 
     function cleanup() {
       clearTimeout(timeout);
@@ -218,4 +219,5 @@ const server = http.createServer(async (request, response) => {
 server.listen(bridgePort, "127.0.0.1", () => {
   console.log(`codex-ai-bridge listening on http://127.0.0.1:${bridgePort}`);
   console.log(`using codex app server ${codexUrl}`);
+  console.log(`codex app server request timeout ${Math.round(codexRequestTimeoutMs / 60000)} minutes`);
 });

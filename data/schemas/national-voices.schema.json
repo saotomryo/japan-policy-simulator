@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "national-voices.schema.json",
+  "title": "NationalVoices",
+  "type": "object",
+  "required": ["voices", "assistantMessage"],
+  "properties": {
+    "voices": {
+      "type": "array",
+      "minItems": 6,
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "group", "mood", "text", "avatar"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "group": { "type": "string" },
+          "mood": { "type": "string" },
+          "text": { "type": "string" },
+          "avatar": {
+            "type": "object",
+            "required": ["slot", "label"],
+            "properties": {
+              "slot": { "type": "string" },
+              "label": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "assistantMessage": { "type": "string" }
+  },
+  "additionalProperties": false
+}

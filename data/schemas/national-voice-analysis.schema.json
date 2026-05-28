@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "national-voice-analysis.schema.json",
+  "title": "NationalVoiceAnalysis",
+  "type": "object",
+  "required": ["voiceAnalysis", "assistantMessage"],
+  "properties": {
+    "voiceAnalysis": {
+      "type": "object",
+      "required": ["populationSize", "sampledOpinionCount", "embeddingModel", "clusters", "distances", "hierarchy"],
+      "properties": {
+        "populationSize": {
+          "type": "number",
+          "minimum": 1000000,
+          "description": "政策影響を受ける推定母集団。代表発話数ではない。国全体に関わる政策では125000000程度。"
+        },
+        "sampledOpinionCount": {
+          "type": "number",
+          "minimum": 800,
+          "description": "背後にある推定アンケート母数。代表発話数ではない。通常は800から3000程度。"
+        },
+        "embeddingModel": { "type": "string" },
+        "clusters": {
+          "type": "array",
+          "minItems": 4,
+          "items": {
+            "type": "object",
+            "required": ["id", "label", "size", "sentiment", "x", "y", "keywords", "summary", "representativeVoiceIds"],
+            "properties": {
+              "id": { "type": "string" },
+              "label": { "type": "string" },
+              "size": { "type": "number" },
+              "sentiment": { "type": "number" },
+              "x": { "type": "number" },
+              "y": { "type": "number" },
+              "keywords": { "type": "array", "items": { "type": "string" } },
+              "summary": { "type": "string" },
+              "representativeVoiceIds": { "type": "array", "items": { "type": "string" } }
+            },
+            "additionalProperties": false
+          }
+        },
+        "distances": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["from", "to", "distance", "label"],
+            "properties": {
+              "from": { "type": "string" },
+              "to": { "type": "string" },
+              "distance": { "type": "number" },
+              "label": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "hierarchy": {
+          "type": "object",
+          "required": ["label", "size", "children"],
+          "properties": {
+            "label": { "type": "string" },
+            "size": { "type": "number" },
+            "children": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["label", "size", "children"],
+                "properties": {
+                  "label": { "type": "string" },
+                  "size": { "type": "number" },
+                  "clusterId": { "type": ["string", "null"] },
+                  "children": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": ["label", "size", "clusterId"],
+                      "properties": {
+                        "label": { "type": "string" },
+                        "size": { "type": "number" },
+                        "clusterId": { "type": ["string", "null"] }
+                      },
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "assistantMessage": { "type": "string" }
+  },
+  "additionalProperties": false
+}

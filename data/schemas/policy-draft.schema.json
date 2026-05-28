@@ -11,6 +11,7 @@
     "budget",
     "cashUse",
     "financePlan",
+    "costBreakdown",
     "implementationDetails",
     "expectedEffects",
     "concerns",
@@ -29,6 +30,38 @@
     "budget": { "type": "number", "minimum": 0 },
     "cashUse": { "type": "number", "minimum": 0 },
     "financePlan": { "type": "string" },
+    "costBreakdown": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "amount", "unit", "costType", "target", "calculation", "fundingSource", "details"],
+        "properties": {
+          "id": { "type": "string" },
+          "label": { "type": "string" },
+          "amount": { "type": "number", "minimum": 0 },
+          "unit": { "type": "string" },
+          "costType": { "type": "string" },
+          "target": { "type": "string" },
+          "calculation": { "type": "string" },
+          "fundingSource": { "type": "string" },
+          "details": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["label", "amount", "unit", "memo"],
+              "properties": {
+                "label": { "type": "string" },
+                "amount": { "type": "number", "minimum": 0 },
+                "unit": { "type": "string" },
+                "memo": { "type": "string" }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
     "implementationDetails": { "type": "array", "items": { "type": "string" } },
     "expectedEffects": { "type": "array", "items": { "type": "string" } },
     "concerns": { "type": "array", "items": { "type": "string" } },
@@ -69,7 +102,19 @@
         "participation": { "type": "number" },
         "externalReputation": { "type": "number" },
         "externalAchievements": { "type": "number" },
-        "teacherSatisfaction": { "type": "number" }
+        "teacherSatisfaction": { "type": "number" },
+        "fiscalCapacity": { "type": "number" },
+        "socialSecurity": { "type": "number" },
+        "economicRipple": { "type": "number" },
+        "digitalUtilization": { "type": "number" },
+        "implementationRisk": { "type": "number" },
+        "regionalMobility": { "type": "number" },
+        "safetyTrust": { "type": "number" },
+        "importIndustryImpact": { "type": "number" },
+        "exportIndustryImpact": { "type": "number" },
+        "manufacturingImpact": { "type": "number" },
+        "agricultureImpact": { "type": "number" },
+        "financeIndustryImpact": { "type": "number" }
       },
       "additionalProperties": false
     },

@@ -1,12 +1,12 @@
 {
   "scenario": {
     "id": "national",
-    "title": "国版 政策シミュレーター",
+    "title": "日本版　仮想政策シミュレーター",
     "termLabel": "政策検討",
     "seed": "JP-2025-MOCK",
     "baseYear": 2025,
     "status": "政策案作成済み",
-    "selectedPolicyTitle": "消費税減税"
+    "selectedPolicyTitle": "食料品のみ消費税を0%"
   },
   "metrics": [
     { "id": "support", "label": "政策納得度", "value": 49, "delta": 0, "tone": "warn", "visible": true, "category": "social", "sourceType": "fixed_virtual", "baseYear": 2025, "description": "政策説明への納得感を示す仮想指標" },
@@ -21,6 +21,10 @@
     { "id": "fiscalCapacity", "label": "財政余力", "value": 41, "delta": -2, "tone": "risk", "visible": true, "category": "finance", "sourceType": "official_stat_reference", "baseYear": 2025, "description": "追加政策を支える財政的な余力" },
     { "id": "socialSecurity", "label": "社会保障持続性", "value": 45, "delta": -1, "tone": "warn", "visible": true, "category": "finance", "sourceType": "official_stat_reference", "baseYear": 2025, "description": "社会保障制度の持続性に関する参考スコア" },
     { "id": "economicRipple", "label": "経済波及効果", "value": 56, "delta": 2, "tone": "good", "visible": true, "category": "economy", "sourceType": "ai_estimated", "baseYear": 2025, "description": "政策が国内需要、産業活動、投資心理へ与える総合的な短期影響" },
+    { "id": "digitalUtilization", "label": "デジタル利用度", "value": 57, "delta": 1, "tone": "warn", "visible": false, "category": "digital", "sourceType": "ai_estimated", "baseYear": 2025, "description": "国民・事業者・行政職員がデジタル手続きを利用できる度合い" },
+    { "id": "implementationRisk", "label": "実装リスク", "value": 63, "delta": 2, "tone": "risk", "visible": false, "category": "implementation", "sourceType": "ai_estimated", "baseYear": 2025, "description": "制度変更、システム移行、責任分界、現場運用に伴う失敗リスク" },
+    { "id": "regionalMobility", "label": "地域交通維持", "value": 48, "delta": -1, "tone": "warn", "visible": false, "category": "regional", "sourceType": "ai_estimated", "baseYear": 2025, "description": "地方部・高齢者・移動困難層の交通アクセスを維持できる度合い" },
+    { "id": "safetyTrust", "label": "安全・責任信頼度", "value": 52, "delta": 0, "tone": "warn", "visible": false, "category": "implementation", "sourceType": "ai_estimated", "baseYear": 2025, "description": "AI・自動運転などで事故、誤回答、説明責任への信頼が保たれる度合い" },
     { "id": "importIndustryImpact", "label": "輸入業影響", "value": 58, "delta": 2, "tone": "good", "visible": false, "category": "industry", "sourceType": "ai_estimated", "baseYear": 2025, "description": "輸入品需要、為替感応度、物流コストを踏まえた業界影響" },
     { "id": "exportIndustryImpact", "label": "輸出業影響", "value": 51, "delta": 0, "tone": "warn", "visible": false, "category": "industry", "sourceType": "ai_estimated", "baseYear": 2025, "description": "外需、為替、海外需要との関係を踏まえた業界影響" },
     { "id": "manufacturingImpact", "label": "製造業影響", "value": 54, "delta": 1, "tone": "warn", "visible": false, "category": "industry", "sourceType": "ai_estimated", "baseYear": 2025, "description": "部材調達、国内需要、設備投資心理への影響" },
@@ -95,59 +99,101 @@
   "policyTargets": [
     {
       "id": "consumption_tax_cut",
-      "title": "消費税減税",
+      "title": "食料品のみ消費税を0%",
       "fit": 88,
-      "metrics": ["税負担感", "家計可処分所得", "財政余力", "社会保障持続性", "経済波及効果", "業界別影響"],
-      "summary": "物価高対策として時限的に消費税率を引き下げ、家計負担を軽減する。",
+      "metrics": ["税負担感", "家計可処分所得", "財政余力", "社会保障持続性", "経済波及効果", "業界別影響", "実装リスク"],
+      "summary": "酒類・外食を除く食料品の消費税率を時限的に0%へ下げ、生活必需品の負担感を軽減する仮想政策。価格転嫁、区分経理、税収減、低所得層への実効性を同時に検討する。",
       "field": "税制・家計支援",
-      "relatedMetricIds": ["rule", "academic", "fiscalCapacity", "socialSecurity", "support", "economicRipple", "importIndustryImpact", "exportIndustryImpact", "manufacturingImpact", "agricultureImpact", "financeIndustryImpact"],
-      "recommendedViews": ["income", "generation", "industry", "fiscal", "clusters"],
-      "fundingNote": "恒久化する場合は社会保障財源への補填策が必要。"
+      "relatedMetricIds": ["rule", "academic", "fiscalCapacity", "socialSecurity", "support", "economicRipple", "implementationRisk", "importIndustryImpact", "exportIndustryImpact", "manufacturingImpact", "agricultureImpact", "financeIndustryImpact"],
+      "recommendedViews": ["income", "generation", "industry", "fiscal", "implementation", "clusters"],
+      "fundingNote": "税収減と社会保障財源への補填策、時限措置終了時の出口戦略が必要。",
+      "designIssues": [
+        { "id": "scope", "title": "対象範囲", "axisA": "生活必需品を広く対象", "axisB": "対象を絞って財源減を抑制", "description": "生鮮・加工食品・テイクアウト・学校給食など、どこまで0%に含めるかで便益と事務負担が変わる。対象が広いほど家計効果は出るが、税収減と線引きコストも増える。", "watchPoints": ["外食・酒類との線引き", "小売・飲食事業者の区分経理", "価格転嫁されるか", "低所得層への実効性"] },
+        { "id": "duration", "title": "時限措置か恒久措置か", "axisA": "短期の物価対策", "axisB": "恒久的な生活支援", "description": "時限措置は財源負担を抑えやすい一方、終了時の反動や再引上げの政治コストが残る。", "watchPoints": ["終了条件", "再増税時の反発", "財政規律への説明"] },
+        { "id": "redistribution", "title": "広く減税か targeted 支援か", "axisA": "全世帯にわかりやすい減税", "axisB": "低所得層へ重点支援", "description": "食料品減税は幅広く届くが、高所得層にも便益が出るため、給付・還付との組み合わせが争点になる。", "watchPoints": ["所得別効果", "家計支援の実感", "給付付き税額控除との比較"] },
+        { "id": "operation", "title": "制度運用の単純さ", "axisA": "0%でわかりやすく実施", "axisB": "品目別・期間別に細かく制御", "description": "単純な制度は理解されやすいが財源影響が大きく、細かい制度は財源を抑えられるが実装リスクと不公平感が増える。", "watchPoints": ["レジ改修", "請求書・インボイス対応", "監査・不正防止"] }
+      ]
     },
     {
       "id": "child_support",
-      "title": "子育て支援給付の拡充",
+      "title": "子どもの数に応じた子育て世代への給付",
       "fit": 76,
-      "metrics": ["家計可処分所得", "世代間公平感", "政策納得度", "経済波及効果", "業界別影響"],
-      "summary": "子育て世帯への給付を増やし、出生・家計不安に対応する。",
+      "metrics": ["家計可処分所得", "世代間公平感", "政策納得度", "経済波及効果", "行政現場負荷", "デジタル利用度", "業界別影響"],
+      "summary": "第2子・第3子以降など子どもの数に応じて給付額を上乗せし、子育て費用と将来不安を軽減する仮想政策。現金給付だけでなく、保育・教育・住宅支援との配分も争点にする。",
       "field": "子育て・社会保障",
-      "relatedMetricIds": ["academic", "fairness", "support", "fiscalCapacity", "economicRipple", "manufacturingImpact", "agricultureImpact", "financeIndustryImpact"],
-      "recommendedViews": ["generation", "income", "industry", "regional", "fiscal"],
-      "fundingNote": "対象設計と所得制限の有無で賛否が分かれる。"
+      "relatedMetricIds": ["academic", "fairness", "support", "fiscalCapacity", "economicRipple", "teacherSatisfaction", "digitalUtilization", "implementationRisk", "manufacturingImpact", "agricultureImpact", "financeIndustryImpact"],
+      "recommendedViews": ["generation", "income", "regional", "fiscal", "implementation", "digital_access"],
+      "fundingNote": "給付水準、所得制限、多子加算、財源の継続性で賛否が分かれる。",
+      "designIssues": [
+        { "id": "targeting", "title": "所得制限の有無", "axisA": "全子育て世帯へ普遍給付", "axisB": "所得・困窮度で重点化", "description": "普遍給付はわかりやすいが財源規模が大きく、重点化は公平性を説明しやすいが制度が複雑になる。", "watchPoints": ["中間層の納得感", "低所得世帯への実効性", "申請・審査コスト"] },
+        { "id": "birth_order", "title": "第何子から厚くするか", "axisA": "第1子から広く支援", "axisB": "第2子・第3子以降へ重点支援", "description": "多子世帯支援は出生数への動機づけを狙える一方、第1子の壁や単身・子なし世帯の公平感が論点になる。", "watchPoints": ["世代間公平感", "多子世帯の生活費", "若年層の将来不安"] },
+        { "id": "cash_or_service", "title": "現金給付かサービス整備か", "axisA": "家計へ直接給付", "axisB": "保育・教育・住宅支援へ投資", "description": "現金給付は即効性が高いが、保育・教育サービス不足を解かない場合は出生・就労への効果が限定される。", "watchPoints": ["短期の家計改善", "保育供給", "女性就労・地域差"] },
+        { "id": "delivery", "title": "自動給付か申請方式か", "axisA": "行政データで自動給付", "axisB": "申請確認を重視", "description": "自動給付は受給漏れを減らすがデータ連携と誤給付リスクがあり、申請方式は確認しやすいが手続き負担が大きい。", "watchPoints": ["受給漏れ", "誤給付", "自治体事務", "デジタル利用度"] }
+      ]
     },
     {
       "id": "gov_dx",
-      "title": "行政DXの推進",
+      "title": "行政窓口・問い合わせ窓口でのAI利用",
       "fit": 69,
-      "metrics": ["行政現場負荷", "政策納得度", "国際信頼度", "経済波及効果", "業界別影響"],
-      "summary": "行政手続きのデジタル化で利用者負担と現場負荷を下げる。",
+      "metrics": ["行政現場負荷", "実装リスク", "安全・責任信頼度", "デジタル利用度", "政策納得度", "経済波及効果", "業界別影響"],
+      "summary": "行政窓口や問い合わせ対応にAIを導入し、住民案内、職員支援、手続き説明の効率化を図る仮想政策。誤回答、個人情報、説明責任、デジタル弱者対応を主要論点として扱う。",
       "field": "行政改革・デジタル",
-      "relatedMetricIds": ["teacherSatisfaction", "support", "externalReputation", "economicRipple", "financeIndustryImpact", "manufacturingImpact"],
-      "recommendedViews": ["implementation", "digital_access", "industry", "generation", "clusters"],
-      "fundingNote": "初期投資と移行期の現場負荷が論点。"
+      "relatedMetricIds": ["teacherSatisfaction", "implementationRisk", "safetyTrust", "digitalUtilization", "support", "economicRipple", "financeIndustryImpact", "manufacturingImpact"],
+      "recommendedViews": ["implementation", "digital_access", "generation", "regional", "industry", "clusters"],
+      "fundingNote": "初期投資、個人情報保護、誤回答時の責任、職員研修コストが論点。",
+      "designIssues": [
+        { "id": "scope", "title": "AIに任せる範囲", "axisA": "住民向け一次回答まで拡大", "axisB": "職員向け支援に限定", "description": "住民向けAIは利便性が高い一方、誤回答や説明責任のリスクが大きい。", "watchPoints": ["誤回答時の責任", "人間確認の導線", "対応履歴の保存"] },
+        { "id": "privacy", "title": "データ活用と個人情報保護", "axisA": "相談履歴を活用して精度向上", "axisB": "個人情報を最小化", "description": "行政データを活用すると精度は上がるが、個人情報・機微情報の扱いに厳格な管理が必要になる。", "watchPoints": ["ログ管理", "学習利用の可否", "委託先管理"] },
+        { "id": "digital_access", "title": "デジタル化と窓口維持", "axisA": "オンライン・AI対応を優先", "axisB": "対面窓口を厚く残す", "description": "効率化を進めるほど、デジタルに不慣れな高齢者や困難層への代替手段が重要になる。", "watchPoints": ["高齢者対応", "多言語・障害者対応", "職員負荷の偏り"] },
+        { "id": "review", "title": "結果レビューの強さ", "axisA": "迅速回答を優先", "axisB": "人間レビューを厚くする", "description": "人間レビューを厚くすると誤回答リスクは下がるが、即時性と省力化効果は弱くなる。", "watchPoints": ["レビュー対象範囲", "回答保留ルール", "職員研修", "苦情処理"] }
+      ]
+    },
+    {
+      "id": "autonomous_driving",
+      "title": "自動運転の推進と法規制の整備",
+      "fit": 72,
+      "metrics": ["地域交通維持", "安全・責任信頼度", "実装リスク", "行政現場負荷", "経済波及効果", "業界別影響", "国際信頼度", "デジタル利用度"],
+      "summary": "地域交通や物流を中心に自動運転サービスの導入を進め、許認可、事故責任、遠隔監視などの制度整備を行う仮想政策。",
+      "field": "交通・産業・規制",
+      "relatedMetricIds": ["regionalMobility", "safetyTrust", "implementationRisk", "teacherSatisfaction", "digitalUtilization", "support", "externalReputation", "externalAchievements", "economicRipple", "manufacturingImpact", "financeIndustryImpact", "fiscalCapacity"],
+      "recommendedViews": ["regional", "implementation", "industry", "generation", "international", "digital_access", "clusters"],
+      "fundingNote": "実証支援、道路・通信インフラ、遠隔監視体制、事故対応制度の整備費が必要。",
+      "designIssues": [
+        { "id": "deployment_area", "title": "導入地域の優先順位", "axisA": "地方交通空白地を優先", "axisB": "都市・物流幹線で収益性を優先", "description": "地方優先は公共性が高いが採算性が弱く、都市・物流優先は普及速度が上がるが地域格差が残る。", "watchPoints": ["地方高齢者の移動手段", "物流人手不足", "自治体負担"] },
+        { "id": "safety", "title": "安全規制の強さ", "axisA": "厳格な許認可で段階導入", "axisB": "実証特区で迅速に導入", "description": "安全基準を厳しくすると信頼を得やすい一方、導入速度や事業者負担が増える。", "watchPoints": ["事故責任", "遠隔監視", "悪天候・混雑時の停止基準"] },
+        { "id": "labor", "title": "雇用転換と産業育成", "axisA": "運転職の転換支援を重視", "axisB": "新産業育成を優先", "description": "自動運転は交通・物流の人手不足対策になる一方、既存運転職や整備・保険・自治体業務の再設計が必要になる。", "watchPoints": ["雇用影響", "保険・責任分担", "国内産業競争力"] },
+        { "id": "public_acceptance", "title": "社会受容と説明責任", "axisA": "限定地域で信頼を積む", "axisB": "広域展開で効果を早く出す", "description": "事故や停止時の説明責任が曖昧なまま広げると、地域交通の改善効果より安全不安が目立つ。", "watchPoints": ["住民説明", "事故時の補償", "遠隔監視ログ", "自治体の責任範囲"] }
+      ]
     }
   ],
   "issues": [
     {
       "id": "consumption_tax_cut",
-      "title": "消費税減税",
+      "title": "食料品のみ消費税を0%",
       "fit": 88,
       "metrics": ["税負担感", "家計可処分所得", "財政余力", "社会保障持続性", "経済波及効果", "業界別影響"],
-      "summary": "物価高対策として時限的に消費税率を引き下げ、家計負担を軽減する。"
+      "summary": "酒類・外食を除く食料品の消費税率を時限的に0%へ下げ、生活必需品の負担感を軽減する仮想政策。"
     },
     {
       "id": "child_support",
-      "title": "子育て支援給付の拡充",
+      "title": "子どもの数に応じた子育て世代への給付",
       "fit": 76,
       "metrics": ["家計可処分所得", "世代間公平感", "政策納得度", "経済波及効果", "業界別影響"],
-      "summary": "子育て世帯への給付を増やし、出生・家計不安に対応する。"
+      "summary": "第2子・第3子以降など子どもの数に応じて給付額を上乗せし、子育て費用と将来不安を軽減する仮想政策。"
     },
     {
       "id": "gov_dx",
-      "title": "行政DXの推進",
+      "title": "行政窓口・問い合わせ窓口でのAI利用",
       "fit": 69,
-      "metrics": ["行政現場負荷", "政策納得度", "国際信頼度", "経済波及効果", "業界別影響"],
-      "summary": "行政手続きのデジタル化で利用者負担と現場負荷を下げる。"
+      "metrics": ["行政現場負荷", "実装リスク", "安全・責任信頼度", "デジタル利用度", "政策納得度", "経済波及効果", "業界別影響"],
+      "summary": "行政窓口や問い合わせ対応にAIを導入し、住民案内、職員支援、手続き説明の効率化を図る仮想政策。"
+    },
+    {
+      "id": "autonomous_driving",
+      "title": "自動運転の推進と法規制の整備",
+      "fit": 72,
+      "metrics": ["地域交通維持", "安全・責任信頼度", "実装リスク", "行政現場負荷", "経済波及効果", "業界別影響", "国際信頼度", "デジタル利用度"],
+      "summary": "地域交通や物流を中心に自動運転サービスの導入を進め、許認可、事故責任、遠隔監視などの制度整備を行う仮想政策。"
     }
   ],
   "voices": [
@@ -294,6 +340,11 @@
       { "segmentId": "industry_manufacturing", "segmentLabel": "製造業", "axis": "industry", "applicability": "applicable", "effectScore": 3, "benefitLevel": "medium", "riskLevel": "medium", "summary": "耐久財・生活関連製品には需要押し上げが出るが、原材料費と設備投資判断は別要因に左右される。", "reason": "国内需要の改善とコスト制約が同時に作用するため" },
       { "segmentId": "industry_agriculture", "segmentLabel": "農業", "axis": "industry", "applicability": "applicable", "effectScore": 2, "benefitLevel": "low", "riskLevel": "medium", "summary": "食品需要は底堅くなるが、燃料・肥料・流通コストへの直接対策ではない。", "reason": "需要面の効果に比べ、生産コスト軽減の効果が限定的なため" },
       { "segmentId": "industry_finance", "segmentLabel": "金融", "axis": "industry", "applicability": "applicable", "effectScore": -2, "benefitLevel": "low", "riskLevel": "medium", "summary": "消費者信用にはプラスだが、財源不安が強まると金利・国債市場への警戒が残る。", "reason": "短期需要改善と財政リスク評価が逆方向に働くため" }
+    ],
+    "fiscal": [
+      { "segmentId": "tax_revenue_loss", "segmentLabel": "税収減", "axis": "fiscal", "applicability": "applicable", "effectScore": -10, "benefitLevel": "none", "riskLevel": "high", "summary": "食料品0%化により消費税収が大きく減り、短期財源余地を圧迫する。", "reason": "生活必需品は消費規模が大きく、税率変更が税収へ直接響くため" },
+      { "segmentId": "social_security_funding", "segmentLabel": "社会保障財源", "axis": "fiscal", "applicability": "applicable", "effectScore": -8, "benefitLevel": "none", "riskLevel": "high", "summary": "消費税収を前提にした社会保障財源への補填説明が必要になる。", "reason": "減税便益と社会保障持続性の懸念が同時に発生するため" },
+      { "segmentId": "temporary_buffer", "segmentLabel": "時限措置の財源バッファ", "axis": "fiscal", "applicability": "applicable", "effectScore": -5, "benefitLevel": "low", "riskLevel": "medium", "summary": "時限措置なら財源負担は限定しやすいが、延長圧力と出口戦略が課題になる。", "reason": "終了条件が曖昧だと恒久化圧力が出るため" }
     ],
     "international": [
       { "segmentId": "international_relation", "segmentLabel": "国際関係", "axis": "international", "applicability": "low_relevance", "effectScore": null, "benefitLevel": "none", "riskLevel": "low", "summary": "消費税減税では国際関係への直接影響は限定的。", "reason": "主な効果が国内家計と財政に集中するため" }

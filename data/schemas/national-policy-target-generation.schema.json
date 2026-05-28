@@ -1,0 +1,290 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "national-policy-target-generation.schema.json",
+  "title": "NationalPolicyTargetGeneration",
+  "type": "object",
+  "required": ["voices", "voiceAnalysis", "policyDraft", "segmentEffects", "assistantMessage"],
+  "properties": {
+    "voices": {
+      "type": "array",
+      "minItems": 5,
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "group", "mood", "text", "avatar"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "group": { "type": "string" },
+          "mood": { "type": "string" },
+          "text": { "type": "string" },
+          "avatar": {
+            "type": "object",
+            "required": ["slot", "label"],
+            "properties": {
+              "slot": { "type": "string" },
+              "label": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "voiceAnalysis": {
+      "type": "object",
+      "required": ["populationSize", "sampledOpinionCount", "embeddingModel", "clusters", "distances", "hierarchy"],
+      "properties": {
+        "populationSize": {
+          "type": "number",
+          "minimum": 1000000,
+          "description": "政策影響を受ける推定母集団。代表発話数ではない。国全体に関わる政策では125000000程度。"
+        },
+        "sampledOpinionCount": {
+          "type": "number",
+          "minimum": 800,
+          "description": "背後にある推定アンケート母数。代表発話数ではない。通常は800から3000程度。"
+        },
+        "embeddingModel": { "type": "string" },
+        "clusters": {
+          "type": "array",
+          "minItems": 4,
+          "items": {
+            "type": "object",
+            "required": ["id", "label", "size", "sentiment", "x", "y", "keywords", "summary", "representativeVoiceIds"],
+            "properties": {
+              "id": { "type": "string" },
+              "label": { "type": "string" },
+              "size": { "type": "number" },
+              "sentiment": { "type": "number" },
+              "x": { "type": "number" },
+              "y": { "type": "number" },
+              "keywords": { "type": "array", "items": { "type": "string" } },
+              "summary": { "type": "string" },
+              "representativeVoiceIds": { "type": "array", "items": { "type": "string" } }
+            },
+            "additionalProperties": false
+          }
+        },
+        "distances": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["from", "to", "distance", "label"],
+            "properties": {
+              "from": { "type": "string" },
+              "to": { "type": "string" },
+              "distance": { "type": "number" },
+              "label": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "hierarchy": {
+          "type": "object",
+          "required": ["label", "size", "children"],
+          "properties": {
+            "label": { "type": "string" },
+            "size": { "type": "number" },
+            "children": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["label", "size", "children"],
+                "properties": {
+                  "label": { "type": "string" },
+                  "size": { "type": "number" },
+                  "clusterId": { "type": ["string", "null"] },
+                  "children": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": ["label", "size", "clusterId"],
+                      "properties": {
+                        "label": { "type": "string" },
+                        "size": { "type": "number" },
+                        "clusterId": { "type": ["string", "null"] }
+                      },
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "policyDraft": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "summary",
+        "primaryIssueId",
+        "budget",
+        "cashUse",
+        "financePlan",
+        "costBreakdown",
+        "implementationDetails",
+        "expectedEffects",
+        "concerns",
+        "beneficiaryGroups",
+        "lowBenefitGroups",
+        "shortTermEffects",
+        "longTermEffects",
+        "risks"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "summary": { "type": "string" },
+        "primaryIssueId": { "type": "string" },
+        "secondaryIssueIds": { "type": "array", "items": { "type": "string" } },
+        "budget": { "type": "number", "minimum": 0 },
+        "cashUse": { "type": "number", "minimum": 0 },
+        "financePlan": { "type": "string" },
+        "costBreakdown": {
+          "type": "array",
+          "minItems": 3,
+          "items": {
+            "type": "object",
+            "required": ["id", "label", "amount", "unit", "costType", "target", "calculation", "fundingSource", "details"],
+            "properties": {
+              "id": { "type": "string" },
+              "label": { "type": "string" },
+              "amount": { "type": "number", "minimum": 0 },
+              "unit": { "type": "string" },
+              "costType": { "type": "string" },
+              "target": { "type": "string" },
+              "calculation": { "type": "string" },
+              "fundingSource": { "type": "string" },
+              "details": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["label", "amount", "unit", "memo"],
+                  "properties": {
+                    "label": { "type": "string" },
+                    "amount": { "type": "number", "minimum": 0 },
+                    "unit": { "type": "string" },
+                    "memo": { "type": "string" }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "implementationDetails": { "type": "array", "items": { "type": "string" } },
+        "expectedEffects": { "type": "array", "items": { "type": "string" } },
+        "concerns": { "type": "array", "items": { "type": "string" } },
+        "beneficiaryGroups": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["groupId", "label", "reason"],
+            "properties": {
+              "groupId": { "type": "string" },
+              "label": { "type": "string" },
+              "reason": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "lowBenefitGroups": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["groupId", "label", "reason"],
+            "properties": {
+              "groupId": { "type": "string" },
+              "label": { "type": "string" },
+              "reason": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "shortTermEffects": {
+          "type": "object",
+          "properties": {
+            "support": { "type": "number" },
+            "happiness": { "type": "number" },
+            "academic": { "type": "number" },
+            "fairness": { "type": "number" },
+            "rule": { "type": "number" },
+            "participation": { "type": "number" },
+            "externalReputation": { "type": "number" },
+            "externalAchievements": { "type": "number" },
+            "teacherSatisfaction": { "type": "number" },
+            "fiscalCapacity": { "type": "number" },
+            "socialSecurity": { "type": "number" },
+            "economicRipple": { "type": "number" },
+            "digitalUtilization": { "type": "number" },
+            "implementationRisk": { "type": "number" },
+            "regionalMobility": { "type": "number" },
+            "safetyTrust": { "type": "number" },
+            "importIndustryImpact": { "type": "number" },
+            "exportIndustryImpact": { "type": "number" },
+            "manufacturingImpact": { "type": "number" },
+            "agricultureImpact": { "type": "number" },
+            "financeIndustryImpact": { "type": "number" }
+          },
+          "additionalProperties": false
+        },
+        "longTermEffects": {
+          "type": "object",
+          "properties": {
+            "trust": { "type": "number" },
+            "polarization": { "type": "number" },
+            "fatigue": { "type": "number" },
+            "publicValue": { "type": "number" }
+          },
+          "additionalProperties": false
+        },
+        "risks": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "segmentEffects": {
+      "type": "object",
+      "properties": {
+        "income": { "$ref": "#/$defs/segmentEffectList" },
+        "generation": { "$ref": "#/$defs/segmentEffectList" },
+        "industry": { "$ref": "#/$defs/segmentEffectList" },
+        "regional": { "$ref": "#/$defs/segmentEffectList" },
+        "international": { "$ref": "#/$defs/segmentEffectList" },
+        "fiscal": { "$ref": "#/$defs/segmentEffectList" },
+        "implementation": { "$ref": "#/$defs/segmentEffectList" },
+        "digital_access": { "$ref": "#/$defs/segmentEffectList" }
+      },
+      "additionalProperties": false
+    },
+    "assistantMessage": { "type": "string" }
+  },
+  "$defs": {
+    "segmentEffectList": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["segmentId", "segmentLabel", "axis", "applicability", "effectScore", "benefitLevel", "riskLevel", "summary", "reason"],
+        "properties": {
+          "segmentId": { "type": "string" },
+          "segmentLabel": { "type": "string" },
+          "axis": { "type": "string" },
+          "applicability": { "type": "string", "enum": ["applicable", "low_relevance"] },
+          "effectScore": { "type": ["number", "null"] },
+          "benefitLevel": { "type": "string", "enum": ["none", "low", "medium", "high"] },
+          "riskLevel": { "type": "string", "enum": ["low", "medium", "high"] },
+          "summary": { "type": "string" },
+          "reason": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

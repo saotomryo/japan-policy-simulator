@@ -1,6 +1,7 @@
 let appData;
 let saveStatus = "未保存";
 let aiNotice = "";
+let aiErrorDialog = null;
 let activeView = "dashboard";
 let activeVoiceChart = "map";
 let activeAnnualChart = "metrics";
@@ -12,7 +13,11 @@ let activeResultEffectAxis = "related";
 let activePolicyPanel = "cost";
 let activeFreePolicyScale = "standard";
 let freePolicyDraftText = "";
+let nationalGenerationNotice = "";
+let isNationalGenerating = false;
 const showLongTermResultSection = false;
+const AI_CHAT_TIMEOUT_MS = 300000;
+const AI_GENERATION_TIMEOUT_MS = 900000;
 
 const providerPresets = {
   sample: { label: "固定サンプル", baseUrl: "", model: "sample" },
@@ -46,7 +51,7 @@ function currentTurn(data = appData) {
 }
 
 function termLabel(turn = currentTurn()) {
-  if (appData?.scenario?.id === "national") return "単発実行";
+  if (appData?.scenario?.id === "national") return "政策検討";
   return `${turn.term}学期`;
 }
 
@@ -220,6 +225,11 @@ function currentHiddenScores(data) {
 
 function formatSignedValue(value) {
   return value > 0 ? `+${value}` : `${value}`;
+}
+
+function formatCount(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.round(number).toLocaleString("ja-JP") : "-";
 }
 
 function hiddenScoreTone(scoreId, value) {
@@ -465,6 +475,259 @@ function exportSaveFile() {
   App(appData);
 }
 
+function reportValue(value, fallback = "-") {
+  if (value === null || value === undefined || value === "") return fallback;
+  return escapeHtml(value);
+}
+
+function reportList(items = [], itemRenderer = (item) => item) {
+  if (!items?.length) return `<p class="empty">該当データはありません。</p>`;
+  return `<ul>${items.map((item) => `<li>${itemRenderer(item)}</li>`).join("")}</ul>`;
+}
+
+function reportMetricTable(metrics = []) {
+  if (!metrics.length) return `<p class="empty">指標はありません。</p>`;
+  return `
+    <table>
+      <thead><tr><th>指標</th><th>値</th><th>種別</th><th>説明</th></tr></thead>
+      <tbody>
+        ${metrics
+          .map(
+            (metric) => `
+              <tr>
+                <td>${reportValue(metric.label || metric.id)}</td>
+                <td><strong>${reportValue(metric.value)}${metric.unit ? reportValue(metric.unit, "") : ""}</strong></td>
+                <td>${SourceTypeLabel(metric.sourceType || metric.source)}</td>
+                <td>${reportValue(metric.description || metric.note || "")}</td>
+              </tr>
+            `,
+          )
+          .join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function reportSegmentEffects(segmentEffects = {}) {
+  const axes = Object.entries(segmentEffects || {});
+  if (!axes.length) return `<p class="empty">属性別効果は未生成です。</p>`;
+  return axes
+    .map(
+      ([axis, effects]) => `
+        <h4>${effectAxisTitle(axis)}</h4>
+        <div class="effect-grid">
+          ${(effects || [])
+            .map((effect) => {
+              const score = effect.effectScore === null || effect.effectScore === undefined ? "N/A" : `${effect.effectScore > 0 ? "+" : ""}${effect.effectScore}`;
+              return `
+                <article>
+                  <div><strong>${reportValue(effect.segmentLabel)}</strong><b>${score}</b></div>
+                  <p>${reportValue(effect.summary)}</p>
+                  <small>${effect.applicability === "low_relevance" ? "該当性が低い: " : ""}${reportValue(effect.reason)}</small>
+                </article>
+              `;
+            })
+            .join("")}
+        </div>
+      `,
+    )
+    .join("");
+}
+
+function reportCostBreakdown(items = []) {
+  if (!items.length) return `<p class="empty">コスト内訳は未生成です。</p>`;
+  return `
+    <div class="cost-grid">
+      ${items
+        .map(
+          (item) => `
+            <article>
+              <header><strong>${reportValue(item.label)}</strong><b>${reportValue(item.amount)}${reportValue(item.unit, "")}</b></header>
+              <p>${reportValue(item.costType)} / ${reportValue(item.target)}</p>
+              <small>${reportValue(item.calculation)}</small>
+              <small>財源: ${reportValue(item.fundingSource)}</small>
+              ${reportList(item.details || [], (detail) => `${reportValue(detail.label)}: ${reportValue(detail.amount)}${reportValue(detail.unit, "")} - ${reportValue(detail.memo)}`)}
+            </article>
+          `,
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function reportResultSection(result = appData.lastSimulationResult) {
+  if (!result) {
+    return `
+      <section>
+        <h2>実行結果</h2>
+        <p class="empty">政策はまだ実行されていません。</p>
+      </section>
+    `;
+  }
+  return `
+    <section>
+      <h2>実行結果</h2>
+      <p>${reportValue(result.summary)}</p>
+      <h3>指標変化</h3>
+      <div class="delta-grid">
+        ${Object.entries(result.visibleMetricDeltas || {})
+          .map(([key, value]) => `<div><span>${metricLabel(key)}</span><strong class="${value >= 0 ? "good" : "warn"}">${value > 0 ? "+" : ""}${value}</strong></div>`)
+          .join("")}
+      </div>
+      <h3>属性別影響</h3>
+      ${reportList(result.groupImpacts || [], (impact) => `<strong>${groupLabel(impact.groupId)}</strong>: ${reportValue(impact.summary)} <b>${impact.scoreDelta > 0 ? "+" : ""}${impact.scoreDelta}</b>`)}
+      <h3>次の論点</h3>
+      ${reportList(result.nextIssues || [])}
+    </section>
+  `;
+}
+
+function buildReportHtml(data = appData) {
+  const exportedAt = new Date();
+  const target = selectedPolicyTarget();
+  const policy = data.policy || emptyPolicyDraft();
+  const analysis = data.voiceAnalysis;
+  const statusTitle = policy.title && policy.title !== "政策案未生成" ? policy.title : target?.title || "政策未選択";
+  const visibleMetrics = data.metrics?.filter((metric) => metric.visible) || [];
+  return `<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${reportValue(data.scenario?.title || "日本版　仮想政策シミュレーター")} レポート</title>
+  <style>
+    :root { color-scheme: light; --ink:#111827; --muted:#64748b; --line:#d9e2ec; --bg:#f5f7fb; --panel:#fff; --accent:#0f4c50; --good:#047857; --warn:#dc2626; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.65; }
+    main { max-width: 1120px; margin: 0 auto; padding: 32px 20px 56px; }
+    header.hero { margin-bottom: 24px; }
+    h1 { font-size: 34px; margin: 0 0 8px; letter-spacing: 0; }
+    h2 { font-size: 24px; margin: 0 0 14px; }
+    h3 { font-size: 18px; margin: 22px 0 10px; }
+    h4 { margin: 18px 0 8px; }
+    section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 22px; margin: 18px 0; box-shadow: 0 10px 24px rgba(15, 23, 42, .06); }
+    .meta, .pill-row, .summary-grid, .delta-grid, .effect-grid, .cost-grid, .cluster-grid, .voice-grid { display: grid; gap: 10px; }
+    .meta { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); color: var(--muted); }
+    .summary-grid, .delta-grid { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+    .summary-grid div, .delta-grid div, .effect-grid article, .cost-grid article, .cluster-grid article, .voice-grid article { border: 1px solid var(--line); border-radius: 8px; padding: 14px; background: #fbfdff; }
+    .summary-grid span, .delta-grid span, small, .empty { color: var(--muted); }
+    .summary-grid strong, .delta-grid strong { display: block; font-size: 24px; }
+    .pill-row { grid-template-columns: repeat(auto-fit, minmax(140px, max-content)); }
+    .pill-row span { border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; color: var(--muted); font-weight: 700; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border-bottom: 1px solid var(--line); padding: 9px 8px; text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-size: 13px; }
+    ul { margin: 8px 0 0; padding-left: 20px; }
+    .effect-grid, .cost-grid, .cluster-grid, .voice-grid { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+    .effect-grid article div, .cost-grid header { display: flex; justify-content: space-between; gap: 12px; align-items: start; }
+    .good { color: var(--good); } .warn { color: var(--warn); }
+    .kicker { color: #0e7490; font-weight: 900; text-transform: uppercase; margin: 0; }
+    @media print { body { background: #fff; } main { max-width: none; padding: 16px; } section { break-inside: avoid; box-shadow: none; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header class="hero">
+      <p class="kicker">National Policy Simulator Report</p>
+      <h1>${reportValue(data.scenario?.title || "日本版　仮想政策シミュレーター")}</h1>
+      <div class="meta">
+        <div>出力日時: ${exportedAt.toLocaleString("ja-JP")}</div>
+        <div>基準年: ${reportValue(data.scenario?.baseYear || 2025)}</div>
+        <div>対象政策: ${reportValue(statusTitle)}</div>
+      </div>
+    </header>
+
+    <section>
+      <h2>ダッシュボード</h2>
+      <div class="summary-grid">
+        ${visibleMetrics.slice(0, 8).map((metric) => `<div><span>${reportValue(metric.label)}</span><strong>${reportValue(metric.value)}${metric.unit ? reportValue(metric.unit, "") : ""}</strong><small>${SourceTypeLabel(metric.sourceType || metric.source)}</small></div>`).join("")}
+      </div>
+      <h3>主要指標</h3>
+      ${reportMetricTable(visibleMetrics)}
+      <h3>国際関係スコア</h3>
+      ${reportList(data.internationalRelations || [], (item) => `<strong>${reportValue(item.label || item.name)}</strong>: ${reportValue(item.score ?? item.value)} ${reportValue(item.note || item.description || "")}`)}
+    </section>
+
+    <section>
+      <h2>政策ターゲット</h2>
+      <h3>${reportValue(target?.title || "未選択")}</h3>
+      <p>${reportValue(target?.summary || "")}</p>
+      <div class="pill-row">
+        <span>分析適合度 ${reportValue(target?.fit || "-")}</span>
+        ${(target?.recommendedViews || []).map((view) => `<span>${effectAxisTitle(view)}</span>`).join("")}
+      </div>
+      <h3>関連指標</h3>
+      ${reportList(target?.metrics || [])}
+      <h3>関連指標と効果軸</h3>
+      ${reportList(policyTargetMetricBindings(target), (binding) => `<strong>${reportValue(binding.metricLabel)}</strong>: ${reportValue(binding.axisLabel)}。${reportValue(binding.description)}`)}
+      <h3>制度設計上の争点</h3>
+      ${reportList(target?.designIssues || [], (issue) => `<strong>${reportValue(issue.title)}</strong>: ${reportValue(issue.axisA)} vs ${reportValue(issue.axisB)}。${reportValue(issue.description)}`)}
+    </section>
+
+    <section>
+      <h2>声の分析</h2>
+      <div class="summary-grid">
+        <div><span>${isNationalScenario() ? "推定母集団" : "想定人口"}</span><strong>${formatCount(analysis?.populationSize || "-")}</strong></div>
+        <div><span>${isNationalScenario() ? "推定アンケート母数" : "分析対象の声"}</span><strong>${formatCount(analysis?.sampledOpinionCount || data.voices?.length || 0)}</strong></div>
+        ${isNationalScenario() ? `<div><span>代表発話</span><strong>${formatCount(data.voices?.length || 0)}</strong></div>` : ""}
+        <div><span>意見クラスター</span><strong>${reportValue(analysis?.clusters?.length || 0)}</strong></div>
+      </div>
+      <h3>クラスター</h3>
+      <div class="cluster-grid">
+        ${(analysis?.clusters || []).map((cluster) => `<article><strong>${reportValue(cluster.label)}</strong><p>${reportValue(cluster.summary)}</p><small>${reportValue(cluster.size)}件相当 / sentiment ${reportValue(cluster.sentiment)}</small></article>`).join("") || `<p class="empty">クラスターは未生成です。</p>`}
+      </div>
+      <h3>代表発話</h3>
+      <div class="voice-grid">
+        ${(data.voices || []).map((voice) => `<article><strong>${reportValue(voice.name)}</strong><small>${reportValue(voice.group)} / ${reportValue(voice.mood)}</small><p>${reportValue(voice.text)}</p></article>`).join("") || `<p class="empty">代表発話は未生成です。</p>`}
+      </div>
+      <h3>効果軸</h3>
+      ${reportSegmentEffects(data.segmentEffects)}
+    </section>
+
+    <section>
+      <h2>政策案</h2>
+      <h3>${reportValue(policy.title)}</h3>
+      <p>${reportValue(policy.summary)}</p>
+      <div class="summary-grid">
+        <div><span>予算</span><strong>${reportValue(policy.budget)}億円</strong></div>
+        <div><span>短期財源使用</span><strong>${reportValue(policy.cashUse)}億円</strong></div>
+      </div>
+      <h3>財源方針</h3>
+      <p>${reportValue(policy.financePlan)}</p>
+      <h3>実施内容</h3>
+      ${reportList(policy.implementationDetails || [])}
+      <h3>実施内容別コスト</h3>
+      ${reportCostBreakdown(policy.costBreakdown || [])}
+      <h3>想定効果</h3>
+      ${reportList(policy.expectedEffects || [])}
+      <h3>懸念</h3>
+      ${reportList(policy.concerns || policy.risks || [])}
+      <h3>対象属性</h3>
+      ${reportList(policy.beneficiaryGroups || [], (item) => `<strong>${reportValue(item.label)}</strong>: ${reportValue(item.reason)}`)}
+      <h3>メリットが薄い・ややデメリットになる対象属性</h3>
+      ${reportList(policy.lowBenefitGroups || [], (item) => `<strong>${reportValue(item.label)}</strong>: ${reportValue(item.reason)}`)}
+    </section>
+
+    ${reportResultSection(data.lastSimulationResult)}
+  </main>
+</body>
+</html>`;
+}
+
+function exportReportHtml() {
+  const html = buildReportHtml(appData);
+  const now = new Date().toISOString().slice(0, 10);
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${isNationalScenario() ? "national-policy-report" : "school-simulator-report"}-${now}.html`;
+  link.click();
+  URL.revokeObjectURL(url);
+  saveStatus = "HTMLレポートを書き出しました";
+  App(appData);
+}
+
 function applySaveFile(saveFile) {
   validateSaveFile(saveFile);
   if (saveFile.app?.scenarioId) {
@@ -506,7 +769,7 @@ function applySaveFile(saveFile) {
     appData.voices = saveFile.currentState.voices;
   }
   if (saveFile.currentState?.voiceAnalysis) {
-    appData.voiceAnalysis = saveFile.currentState.voiceAnalysis;
+    appData.voiceAnalysis = normalizeNationalVoiceAnalysis(saveFile.currentState.voiceAnalysis, appData.voices || saveFile.currentState?.voices || []);
   }
   if (saveFile.currentState?.issues) {
     appData.issues = saveFile.currentState.issues;
@@ -585,10 +848,20 @@ function providerRequiresApiKey(provider = aiConfig.provider) {
   return provider !== "sample" && provider !== "codex_app_server";
 }
 
+function usesFixedSampleProvider() {
+  return aiConfig.provider === "sample";
+}
+
 function hasAiConnection() {
-  if (aiConfig.provider === "sample") return false;
+  if (usesFixedSampleProvider()) return false;
   if (providerRequiresApiKey()) return Boolean(aiConfig.apiKey);
   return Boolean(aiConfig.baseUrl);
+}
+
+function assertAiConnection() {
+  if (!hasAiConnection()) {
+    throw new Error(`${providerLabel()} の接続設定が未完了です。AI設定でBase URLまたはAPI Keyを確認してください。`);
+  }
 }
 
 function saveAiConfig(formData) {
@@ -664,7 +937,7 @@ function providerLabel() {
 
 function aiStatusText() {
   if (!hasAiConnection()) {
-    return "固定サンプル fallback";
+    return aiConfig.provider === "sample" ? "固定サンプル mode" : "未接続";
   }
   if (aiConfig.provider === "codex_app_server") {
     return `${providerLabel()} / ${aiConfig.baseUrl}`;
@@ -672,17 +945,33 @@ function aiStatusText() {
   return `${providerLabel()} / ${aiConfig.model}`;
 }
 
-function setAiFallbackNotice(error) {
-  aiNotice = `${providerLabel()} に接続できなかったため固定サンプルにfallbackしました: ${error.message}`;
+function setAiErrorNotice(error) {
+  aiNotice = `${providerLabel()} のAI接続に失敗しました: ${error.message}`;
+}
+
+function showAiErrorDialog({ title = "AI接続エラー", error, message, retry, cancel }) {
+  const errorMessage = error?.message || message || "AI接続に失敗しました。";
+  setAiErrorNotice({ message: errorMessage });
+  aiErrorDialog = {
+    title,
+    message: message || "AI処理を完了できませんでした。接続設定、ローカルサーバー、APIキー、またはJSON Schema応答を確認してください。",
+    detail: errorMessage,
+    retry,
+    cancel,
+  };
+  App(appData);
+}
+
+function clearAiErrorDialog() {
+  aiErrorDialog = null;
 }
 
 function withTimeout(promise, timeoutMs, message) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => {
-      setTimeout(() => reject(new Error(message)), timeoutMs);
-    }),
-  ]);
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId));
 }
 
 async function callOpenAIResponsesJson({ schemaName, prompt, schema }) {
@@ -700,7 +989,7 @@ async function callOpenAIResponsesJson({ schemaName, prompt, schema }) {
           content: [
             {
               type: "input_text",
-              text: "あなたは学園自治シミュレーターの熟議支援AIです。必ず指定されたJSON Schemaに従って日本語で返してください。",
+              text: "あなたは政策シミュレーターの熟議支援AIです。国版シナリオでは日本の政策効果、国民・ステークホルダー反応、財源制約を扱います。必ず指定されたJSON Schemaに従って日本語で返してください。",
             },
           ],
         },
@@ -741,7 +1030,7 @@ async function callOpenAICompatibleChatJson({ schemaName, prompt, schema }) {
       messages: [
         {
           role: "system",
-          content: "あなたは学園自治シミュレーターの熟議支援AIです。必ず指定されたJSON Schemaに従ってJSONだけを返してください。",
+          content: "あなたは政策シミュレーターの熟議支援AIです。国版シナリオでは日本の政策効果、国民・ステークホルダー反応、財源制約を扱います。必ず指定されたJSON Schemaに従ってJSONだけを返してください。",
         },
         { role: "user", content: prompt },
       ],
@@ -867,9 +1156,10 @@ function sampleIssueDetailResponse(issue) {
 }
 
 async function discussIssueSelection(userText) {
+  const national = isNationalScenario();
   const prompt = JSON.stringify(
     {
-      task: "課題候補を深掘りし、今学期に扱う課題選択を支援してください。",
+      task: national ? "政策ターゲットを深掘りし、政策影響分析を支援してください。" : "課題候補を深掘りし、今学期に扱う課題選択を支援してください。",
       userMessage: userText,
       simulation: {
         scenario: appData.scenario,
@@ -878,20 +1168,27 @@ async function discussIssueSelection(userText) {
         voices: appData.voices,
         issueCandidates: appData.issues,
       },
-      constraints: [
-        "1学期に実施する施策は1つ",
-        "基本はキャッシュの範囲内で実施",
-        "他予算充当が必要な場合は副作用も述べる",
-        "最終決定はユーザーが行う",
-      ],
+      constraints: national
+        ? [
+            "この時点では政策案を決定しない",
+            "関連指標、効果軸、利害関係者、財源上の注意を述べる",
+            "最終決定はユーザーが行う",
+          ]
+        : [
+            "1学期に実施する施策は1つ",
+            "基本はキャッシュの範囲内で実施",
+            "他予算充当が必要な場合は副作用も述べる",
+            "最終決定はユーザーが行う",
+          ],
     },
     null,
     2,
   );
 
-  if (!hasAiConnection()) {
+  if (usesFixedSampleProvider()) {
     return sampleIssueSelectionResponse(userText);
   }
+  assertAiConnection();
 
   try {
     return await withTimeout(
@@ -899,33 +1196,23 @@ async function discussIssueSelection(userText) {
         schemaName: "issue-selection-chat-response",
         prompt,
       }),
-      30000,
-      "課題選択チャットのAI応答が30秒以内に返りませんでした",
+      AI_CHAT_TIMEOUT_MS,
+      `${isNationalScenario() ? "政策分析チャット" : "課題選択チャット"}のAI応答が5分以内に返りませんでした`,
     );
   } catch (error) {
     console.warn(error);
-    setAiFallbackNotice(error);
-    if (aiConfig.provider !== "sample") {
-      return {
-        message: `AI接続に失敗しました。固定サンプル応答は使っていません。${error.message}`,
-        recommendedIssueIds: [appData.issueSelectionChat.selectedIssueId].filter(Boolean),
-        reasoning: ["Codex App Server / AI Bridge の接続またはJSON応答を確認してください"],
-        questionsToUser: ["ローカルの codex:app-server と codex:ai-bridge は起動していますか？"],
-        financeAssessment: {
-          cashFeasibleIssueIds: [],
-          requiresBudgetReallocationIssueIds: [],
-          notes: ["AI接続失敗のため財務評価は未実行です。"],
-        },
-      };
-    }
-    return sampleIssueSelectionResponse(userText);
+    setAiErrorNotice(error);
+    throw error;
   }
 }
 
 async function explainIssueSelection(issue) {
+  const national = isNationalScenario();
   const prompt = JSON.stringify(
     {
-      task: "ユーザーが画面上の課題候補を選択しました。チャット欄に表示するため、選択課題の意味、背景、関連する声、指標、財務制約、次に確認すべき論点を説明してください。",
+      task: national
+        ? "ユーザーが画面上の政策ターゲットを選択しました。チャット欄に表示するため、選択政策の意味、背景、関連する声、指標、財源制約、次に確認すべき論点を説明してください。"
+        : "ユーザーが画面上の課題候補を選択しました。チャット欄に表示するため、選択課題の意味、背景、関連する声、指標、財務制約、次に確認すべき論点を説明してください。",
       selectedIssue: issue,
       simulation: {
         scenario: appData.scenario,
@@ -936,20 +1223,28 @@ async function explainIssueSelection(issue) {
         issueCandidates: appData.issues,
         memorySummary: getMemory(appData).memorySummary,
       },
-      constraints: [
-        "この時点では施策を決定しない",
-        "1学期に実施する施策は1つ",
-        "基本はキャッシュ範囲内で検討する",
-        "生徒会が次に深掘りできる問いを含める",
-      ],
+      constraints: national
+        ? [
+            "この時点では政策案を決定しない",
+            "政策ターゲットに関連する指標と効果軸を明示する",
+            "財源上の注意があれば明記する",
+            "ユーザーが次に深掘りできる問いを含める",
+          ]
+        : [
+            "この時点では施策を決定しない",
+            "1学期に実施する施策は1つ",
+            "基本はキャッシュ範囲内で検討する",
+            "生徒会が次に深掘りできる問いを含める",
+          ],
     },
     null,
     2,
   );
 
-  if (!hasAiConnection()) {
+  if (usesFixedSampleProvider()) {
     return sampleIssueDetailResponse(issue);
   }
+  assertAiConnection();
 
   try {
     return await withTimeout(
@@ -957,26 +1252,13 @@ async function explainIssueSelection(issue) {
         schemaName: "issue-selection-chat-response",
         prompt,
       }),
-      30000,
-      "課題詳細説明のAI応答が30秒以内に返りませんでした",
+      AI_CHAT_TIMEOUT_MS,
+      "課題詳細説明のAI応答が5分以内に返りませんでした",
     );
   } catch (error) {
     console.warn(error);
-    setAiFallbackNotice(error);
-    if (aiConfig.provider !== "sample") {
-      return {
-        message: `課題「${issue.title}」を選択しましたが、AI接続に失敗したため詳細説明は生成できませんでした。${error.message}`,
-        recommendedIssueIds: [issue.id],
-        reasoning: ["Codex App Server / AI Bridge の接続またはJSON応答を確認してください"],
-        questionsToUser: ["接続復旧後に、この課題の詳細説明を再生成しますか？"],
-        financeAssessment: {
-          cashFeasibleIssueIds: [],
-          requiresBudgetReallocationIssueIds: [],
-          notes: ["AI接続失敗のため財務評価は未実行です。"],
-        },
-      };
-    }
-    return sampleIssueDetailResponse(issue);
+    setAiErrorNotice(error);
+    throw error;
   }
 }
 
@@ -1087,6 +1369,79 @@ function normalizePolicyGroupItems(items = []) {
   }));
 }
 
+function normalizePolicyDraftForRevision(draft = {}) {
+  return {
+    ...draft,
+    implementationDetails: draft.implementationDetails?.length ? [...draft.implementationDetails] : [],
+    expectedEffects: draft.expectedEffects?.length ? [...draft.expectedEffects] : [],
+    concerns: draft.concerns?.length ? [...draft.concerns] : [],
+    costBreakdown: draft.costBreakdown?.length ? deepClone(draft.costBreakdown) : [],
+    beneficiaryGroups: draft.beneficiaryGroups?.length ? deepClone(draft.beneficiaryGroups) : [],
+    lowBenefitGroups: draft.lowBenefitGroups?.length ? deepClone(draft.lowBenefitGroups) : [],
+    risks: draft.risks?.length ? [...draft.risks] : [],
+  };
+}
+
+function applyFoodReducedTaxRevision(draft, userText) {
+  const revised = normalizePolicyDraftForRevision(draft);
+  const foodRateMatch = userText.match(/(?:食料品|食品)[^\d]*(\d{1,2})\s*%/);
+  const foodRate = foodRateMatch?.[1] || "5";
+  revised.summary = `${revised.summary || revised.title} 修正要望「${userText}」を反映し、食料品は軽減税率${foodRate}%、その他対象は原案の税率を前提に分けて設計しました。`;
+  revised.implementationDetails = [
+    `食料品には軽減税率${foodRate}%を適用し、外食・酒類・高額嗜好品などの除外条件を明文化する。`,
+    "標準税率対象、軽減税率対象、非課税・給付補完対象を分け、事業者向けの判定表を公開する。",
+    "低所得層・子育て世帯・年金生活者には、食料品軽減税率と給付・還付を組み合わせて負担増を抑える。",
+    "小売・飲食・EC事業者のレジ改修、価格表示、インボイス処理の移行期間と相談窓口を設ける。",
+  ];
+  revised.expectedEffects = [
+    `食料品を${foodRate}%に抑えることで、低所得層と固定収入層の生活必需品負担を緩和する。`,
+    "標準税率部分では財政余力と社会保障財源の改善を狙う。",
+    "対象品目を明確にすることで、事業者と消費者の混乱を抑える。",
+  ];
+  revised.concerns = [
+    "軽減税率の対象線引きが複雑になると、事業者の事務負担と制度不信が増える。",
+    "食料品以外の生活必需サービスでは負担増が残る。",
+    "税率区分が増えることで、価格表示・会計・監査の運用コストが上がる。",
+  ];
+  revised.risks = [...new Set([...(revised.risks || []), "軽減税率対象の線引き争い", "小売・飲食事業者の事務負担増"])];
+  revised.lowBenefitGroups = [
+    { groupId: "retail_food_service", label: "小売・飲食事業者", reason: "複数税率の判定、レジ改修、価格表示対応が増える。" },
+    { groupId: "low_income_non_food", label: "食料品以外の支出が大きい低所得層", reason: "光熱費・交通・通信などの負担増は残る。" },
+  ];
+  revised.beneficiaryGroups = [
+    { groupId: "low_income", label: "低所得層", reason: `食料品の税率を${foodRate}%に抑えることで生活必需品の負担増を緩和できる。` },
+    { groupId: "pensioner", label: "年金生活者", reason: "固定収入の中で食費負担の上昇を抑えられる。" },
+  ];
+  revised.shortTermEffects = {
+    ...(revised.shortTermEffects || {}),
+    support: Math.min(0, revised.shortTermEffects?.support ?? -2),
+    fairness: (revised.shortTermEffects?.fairness ?? -4) + 2,
+    fiscalCapacity: revised.shortTermEffects?.fiscalCapacity ?? 6,
+    economicRipple: Math.min(-2, revised.shortTermEffects?.economicRipple ?? -4),
+    importIndustryImpact: Math.min(-1, revised.shortTermEffects?.importIndustryImpact ?? -2),
+  };
+  revised.costBreakdown = revised.costBreakdown?.length ? revised.costBreakdown : sampleNationalPolicyDraft(selectedPolicyTarget()).costBreakdown;
+  revised.costBreakdown = [
+    {
+      id: "reduced_food_tax_system",
+      label: `食料品軽減税率${foodRate}%の制度対応`,
+      amount: Math.round((revised.budget || 42000) * 0.12),
+      unit: "億円",
+      costType: "制度設計・システム対応",
+      target: "国税庁、自治体、小売・飲食・EC事業者",
+      calculation: "複数税率対応の周知、判定表、システム改修支援を概算",
+      fundingSource: "増収分の一部と既存デジタル化予算の組替え",
+      details: [
+        { label: "対象品目判定・周知", amount: Math.round((revised.budget || 42000) * 0.03), unit: "億円", memo: "食品分類、FAQ、消費者説明" },
+        { label: "レジ・会計改修支援", amount: Math.round((revised.budget || 42000) * 0.07), unit: "億円", memo: "中小事業者の複数税率対応" },
+        { label: "相談・監査体制", amount: Math.round((revised.budget || 42000) * 0.02), unit: "億円", memo: "誤適用と問い合わせ対応" },
+      ],
+    },
+    ...revised.costBreakdown.filter((item) => item.id !== "reduced_food_tax_system").slice(0, 3),
+  ];
+  return revised;
+}
+
 function applyPolicyDraft(draft, options = {}) {
   appData.policy = {
     id: draft.id,
@@ -1124,12 +1479,12 @@ function applyPolicyDraft(draft, options = {}) {
       messages: [
         {
           role: "assistant",
-          text: `施策案「${draft.title}」を作成しました。実施内容、効果、懸念点、属性別の影響を見ながら修正できます。`,
+          text: `${isNationalScenario() ? "政策案" : "施策案"}「${draft.title}」を作成しました。実施内容、効果、懸念点、属性別の影響を見ながら修正できます。`,
         },
       ],
     };
   } else {
-    chat.messages.push({ role: "assistant", text: `施策案を「${draft.title}」として更新しました。` });
+    chat.messages.push({ role: "assistant", text: `${isNationalScenario() ? "政策案" : "施策案"}を「${draft.title}」として更新しました。` });
   }
   const memoryBefore = getMemory(appData);
   const now = new Date().toISOString();
@@ -1148,13 +1503,14 @@ function applyPolicyDraft(draft, options = {}) {
       },
     ],
   };
-  saveStatus = "施策ドラフトを作成しました";
+  saveStatus = isNationalScenario() ? "政策案を作成しました" : "施策ドラフトを作成しました";
 }
 
 async function generatePolicyDraft() {
+  const national = isNationalScenario();
   const prompt = JSON.stringify(
     {
-      task: "選択された課題に対して、今学期に1つだけ実行する施策ドラフトを作成してください。",
+      task: national ? "選択された政策ターゲットに対して、政策案ドラフトを作成してください。" : "選択された課題に対して、今学期に1つだけ実行する施策ドラフトを作成してください。",
       simulation: {
         scenario: appData.scenario,
         selectedIssue: selectedIssue(),
@@ -1168,7 +1524,7 @@ async function generatePolicyDraft() {
       },
       constraints: [
         "基本はキャッシュ範囲内",
-        "1つの施策で複数課題に対応してよい",
+        national ? "1つの政策案で複数の関連論点に対応してよい" : "1つの施策で複数課題に対応してよい",
         "ガードレール上のリスクをrisksに入れる",
         "implementationDetailsには実施内容を3件程度入れる",
         "costBreakdownには実施内容ごとのコスト項目、amount、target、calculation、fundingSource、detailsを入れる",
@@ -1183,16 +1539,17 @@ async function generatePolicyDraft() {
     2,
   );
 
-  if (!hasAiConnection()) {
+  if (usesFixedSampleProvider()) {
     return samplePolicyDraft();
   }
+  assertAiConnection();
 
   try {
-    return await withTimeout(callProviderJson({ schemaName: "policy-draft", prompt }), 45000, "施策案生成のAI応答が45秒以内に返りませんでした");
+    return await withTimeout(callProviderJson({ schemaName: "policy-draft", prompt }), AI_GENERATION_TIMEOUT_MS, `${isNationalScenario() ? "政策案" : "施策案"}生成のAI応答が15分以内に返りませんでした`);
   } catch (error) {
     console.warn(error);
-    setAiFallbackNotice(error);
-    return samplePolicyDraft();
+    setAiErrorNotice(error);
+    throw error;
   }
 }
 
@@ -1204,6 +1561,9 @@ async function createPolicyDraftFromSelection() {
 
 function sampleRevisedPolicyDraft(userText) {
   const current = appData.policy;
+  if (/(食料品|食品).*(\d{1,2})\s*%|(\d{1,2})\s*%.*(食料品|食品)/.test(userText)) {
+    return applyFoodReducedTaxRevision(current, userText);
+  }
   return {
     id: current.id || "revised_policy",
     title: current.title,
@@ -1214,9 +1574,9 @@ function sampleRevisedPolicyDraft(userText) {
     cashUse: current.cashUse || 0,
     financePlan: current.financePlan || "キャッシュ範囲内で調整",
     implementationDetails: [
-      ...(current.implementationDetails || []),
-      "修正要望を踏まえ、対象者への事前説明と意見回収を追加する。",
-    ].slice(-4),
+      `修正要望「${userText}」を実施条件に反映し、対象範囲・税率・除外条件を明文化する。`,
+      ...(current.implementationDetails || []).filter((detail) => !detail.includes("修正要望")).slice(0, 3),
+    ],
     expectedEffects: current.expectedEffects?.length ? current.expectedEffects : ["対象課題への納得感を高める。"],
     concerns: [...(current.concerns || current.risks || []), "修正後の説明が増えすぎると実行速度が落ちる可能性がある。"].slice(-4),
     beneficiaryGroups: current.beneficiaryGroups?.length ? current.beneficiaryGroups : [{ groupId: "rule", label: groupLabel("rule"), reason: "説明が明確になることで不安が下がる。" }],
@@ -1228,9 +1588,12 @@ function sampleRevisedPolicyDraft(userText) {
 }
 
 async function revisePolicyDraft(userText) {
+  const national = isNationalScenario();
   const prompt = JSON.stringify(
     {
-      task: "現在の施策案を、ユーザーのチャット指示に基づいて修正してください。修正後の施策案全体を返してください。",
+      task: national
+        ? "現在の政策案を、ユーザーのチャット指示に基づいて修正してください。修正後の政策案全体を返してください。"
+        : "現在の施策案を、ユーザーのチャット指示に基づいて修正してください。修正後の施策案全体を返してください。",
       userMessage: userText,
       simulation: {
         scenario: appData.scenario,
@@ -1245,7 +1608,9 @@ async function revisePolicyDraft(userText) {
         groupMemory: getMemory(appData).groupMemory,
       },
       constraints: [
-        "1学期に実施する施策は1つのままにする",
+        national ? "政策案は1つの政策実行として扱う" : "1学期に実施する施策は1つのままにする",
+        "ユーザー指示に税率、対象品目、対象属性、除外条件、補償策が含まれる場合は、summaryだけでなくimplementationDetailsへ具体的に反映する",
+        "食料品を5%にする等の軽減税率指示では、implementationDetailsに食料品税率、標準税率対象、除外条件、事業者対応を必ず書く",
         "実施内容、想定効果、懸念点、メリットを享受する属性、メリットが薄い属性を必ず更新する",
         "costBreakdownを更新し、何に対してどうコストがかかるかをdetailsまで示す",
         "キャッシュ範囲を大きく超える場合はfinancePlanとconcernsで明記する",
@@ -1256,16 +1621,17 @@ async function revisePolicyDraft(userText) {
     2,
   );
 
-  if (!hasAiConnection()) {
+  if (usesFixedSampleProvider()) {
     return sampleRevisedPolicyDraft(userText);
   }
+  assertAiConnection();
 
   try {
-    return await withTimeout(callProviderJson({ schemaName: "policy-draft", prompt }), 45000, "施策案修正のAI応答が45秒以内に返りませんでした");
+    return await withTimeout(callProviderJson({ schemaName: "policy-draft", prompt }), AI_GENERATION_TIMEOUT_MS, `${isNationalScenario() ? "政策案" : "施策案"}修正のAI応答が15分以内に返りませんでした`);
   } catch (error) {
     console.warn(error);
-    setAiFallbackNotice(error);
-    return sampleRevisedPolicyDraft(userText);
+    setAiErrorNotice(error);
+    throw error;
   }
 }
 
@@ -1366,7 +1732,14 @@ async function initializeWithAi() {
     activeView = "dashboard";
   } catch (error) {
     console.warn(error);
-    setAiFallbackNotice(error);
+    setAiErrorNotice(error);
+    showAiErrorDialog({
+      title: "AI初期化エラー",
+      error,
+      retry: () => initializeWithAi(),
+      cancel: () => App(appData),
+    });
+    return;
   }
   App(appData);
 }
@@ -1479,9 +1852,10 @@ async function simulatePolicyResult() {
     2,
   );
 
-  if (!hasAiConnection()) {
+  if (usesFixedSampleProvider()) {
     return samplePolicySimulationResult();
   }
+  assertAiConnection();
 
   try {
     return await callProviderJson({
@@ -1490,8 +1864,8 @@ async function simulatePolicyResult() {
     });
   } catch (error) {
     console.warn(error);
-    setAiFallbackNotice(error);
-    return samplePolicySimulationResult();
+    setAiErrorNotice(error);
+    throw error;
   }
 }
 
@@ -1619,7 +1993,7 @@ function applySimulationResult(result) {
     ],
     groupMemory,
     memorySummary: {
-      operationPattern: `${memoryBefore.memorySummary.operationPattern} ${isNationalScenario() ? "政策実行後、短期効果と長期予想を分けて確認した。" : "施策実行後、キャッシュ制約内での小規模改善を優先した。"}`,
+      operationPattern: `${memoryBefore.memorySummary.operationPattern} ${isNationalScenario() ? "政策実行後、短期効果と属性別影響を確認した。" : "施策実行後、キャッシュ制約内での小規模改善を優先した。"}`,
       successfulPolicies: [...memoryBefore.memorySummary.successfulPolicies, appData.policy.title],
       remainingSideEffects: [...new Set([...memoryBefore.memorySummary.remainingSideEffects, ...result.nextIssues])],
       groupRisks: groupMemory.filter((group) => group.frustration > group.support).map((group) => `${group.groupId} の不満が残っている`),
@@ -1790,9 +2164,10 @@ async function generateNextTurnStart(turn) {
     2,
   );
 
-  if (!hasAiConnection()) {
+  if (usesFixedSampleProvider()) {
     return sampleNextTurnGeneration(turn);
   }
+  assertAiConnection();
 
   try {
     return await withTimeout(
@@ -1800,13 +2175,13 @@ async function generateNextTurnStart(turn) {
         schemaName: "turn-start-generation",
         prompt,
       }),
-      45000,
-      "次ターン生成のAI応答が45秒以内に返りませんでした",
+      AI_GENERATION_TIMEOUT_MS,
+      "次ターン生成のAI応答が15分以内に返りませんでした",
     );
   } catch (error) {
     console.warn(error);
-    setAiFallbackNotice(error);
-    return sampleNextTurnGeneration(turn);
+    setAiErrorNotice(error);
+    throw error;
   }
 }
 
@@ -2077,13 +2452,135 @@ function selectedPolicyTarget() {
   return isNationalScenario() ? target || null : target || (appData.policyTargets || appData.issues || [])[0];
 }
 
+function designIssuesForPolicy(policyTarget = selectedPolicyTarget()) {
+  return policyTarget?.designIssues || [];
+}
+
 function effectAxisFromRecommended(views = []) {
   const supported = ["income", "generation", "industry", "regional", "international", "fiscal", "implementation", "digital_access"];
   return views.find((view) => supported.includes(view)) || "income";
 }
 
+function metricAxisForMetric(metricId, metric) {
+  const axisByMetricId = {
+    academic: "income",
+    fairness: "generation",
+    rule: "fiscal",
+    fiscalCapacity: "fiscal",
+    socialSecurity: "fiscal",
+    economicRipple: "industry",
+    importIndustryImpact: "industry",
+    exportIndustryImpact: "industry",
+    manufacturingImpact: "industry",
+    agricultureImpact: "industry",
+    financeIndustryImpact: "industry",
+    externalReputation: "international",
+    externalAchievements: "international",
+    teacherSatisfaction: "implementation",
+    implementationRisk: "implementation",
+    safetyTrust: "implementation",
+    digitalUtilization: "digital_access",
+    regionalMobility: "regional",
+    support: "clusters",
+    happiness: "clusters",
+    participation: "clusters",
+  };
+  if (axisByMetricId[metricId]) return axisByMetricId[metricId];
+  const categoryAxis = {
+    finance: "fiscal",
+    economy: "industry",
+    industry: "industry",
+    international: "international",
+    implementation: "implementation",
+    digital: "digital_access",
+    regional: "regional",
+    social: "clusters",
+  };
+  return categoryAxis[metric?.category] || "clusters";
+}
+
+function policyTargetMetricBindings(policyTarget = selectedPolicyTarget()) {
+  const metricIds = policyTarget?.relatedMetricIds || [];
+  return metricIds.map((metricId) => {
+    const metric = appData.metrics?.find((item) => item.id === metricId);
+    return {
+      metricId,
+      metricLabel: metric?.label || metricId,
+      axis: metricAxisForMetric(metricId, metric),
+      axisLabel: effectAxisTitle(metricAxisForMetric(metricId, metric)),
+      description: metric?.description || "",
+    };
+  });
+}
+
+function requiredEffectAxesForPolicy(policyTarget = selectedPolicyTarget()) {
+  const axes = new Set((policyTarget?.recommendedViews || []).filter((axis) => axis !== "clusters"));
+  policyTargetMetricBindings(policyTarget).forEach((binding) => {
+    if (binding.axis !== "clusters") axes.add(binding.axis);
+  });
+  return [...axes];
+}
+
+function inferPolicyDomain(policyTarget) {
+  const text = `${policyTarget?.sourceText || policyTarget?.title || ""} ${policyTarget?.sourceText ? "" : policyTarget?.summary || ""}`.toLowerCase();
+  const includesAny = (patterns) => patterns.some((pattern) => text.includes(pattern));
+  if (includesAny(["防衛", "安全保障", "自衛隊", "軍事", "兵器", "ドローン兵器", "ミサイル", "サイバー防衛", "抑止", "有事", "同盟"])) return "defense_security";
+  if (includesAny(["消費税", "減税", "増税", "税率", "所得税", "法人税"])) return "tax_fiscal";
+  if (includesAny(["子育て", "こども", "子供", "児童", "保育", "教育費", "給付"])) return "childcare_family";
+  if (includesAny(["ai", "人工知能", "行政窓口", "問い合わせ", "自治体dx", "dx", "デジタル"])) return "digital_government";
+  if (includesAny(["自動運転", "モビリティ", "交通", "バス", "タクシー", "物流"])) return "mobility_transport";
+  return "general_policy";
+}
+
+function policyDomainGuidance(domain) {
+  const guidance = {
+    defense_security: {
+      label: "防衛・安全保障",
+      relevantAxes: ["international", "industry", "fiscal", "implementation", "clusters"],
+      voiceFocus: [
+        "抑止力、周辺国・同盟国との関係、防衛産業基盤、調達透明性、財政負担、平和主義・倫理、軍拡懸念、地域安全を主な争点にする",
+        "生活費軽減、所得再分配、子育て支援のような家計便益は、政策本文に明記されない限り中心論点にしない",
+        "ドローン兵器や自律兵器では、事故責任、AI判断、人間の関与、輸出管理、民生転用、サイバー脆弱性を扱う",
+      ],
+    },
+    tax_fiscal: {
+      label: "税制・財政",
+      relevantAxes: ["income", "generation", "industry", "fiscal", "clusters"],
+      voiceFocus: ["家計負担、所得階層、消費、財源、社会保障、事業者実務を主な争点にする"],
+    },
+    childcare_family: {
+      label: "子育て・家族政策",
+      relevantAxes: ["generation", "income", "fiscal", "implementation", "clusters"],
+      voiceFocus: ["子どもの人数、所得制限、共働き・ひとり親、自治体事務、世代間公平を主な争点にする"],
+    },
+    digital_government: {
+      label: "行政DX・AI利用",
+      relevantAxes: ["implementation", "digital_access", "generation", "fiscal", "clusters"],
+      voiceFocus: ["窓口品質、デジタル利用格差、個人情報、説明責任、職員負担、システム障害を主な争点にする"],
+    },
+    mobility_transport: {
+      label: "交通・モビリティ",
+      relevantAxes: ["regional", "implementation", "industry", "generation", "digital_access", "clusters"],
+      voiceFocus: ["地域交通、事故責任、運転手不足、高齢者移動、物流、規制整備を主な争点にする"],
+    },
+    general_policy: {
+      label: "AI自由推論（未分類）",
+      relevantAxes: [],
+      voiceFocus: [
+        "固定分野のテンプレートに寄せず、政策本文から分野、利害関係者、関連指標、効果軸、制度設計上の争点を推論する",
+        "税制、子育て、防衛、行政DX、交通など既知分野の論点を、本文に根拠がないまま流用しない",
+      ],
+    },
+  };
+  return guidance[domain] || guidance.general_policy;
+}
+
+function requiresAiFreeInference(policyTarget) {
+  return Boolean(policyTarget?.id?.startsWith("free_policy_"));
+}
+
 function resetPolicyDrivenViews(policyTarget = selectedPolicyTarget()) {
-  const axis = effectAxisFromRecommended(policyTarget?.recommendedViews || []);
+  const axis = requiredEffectAxesForPolicy(policyTarget)[0] || effectAxisFromRecommended(policyTarget?.recommendedViews || []);
   activeDashboardAnalysis = ["implementation", "industry", "fiscal", "international", "social"].includes(axis) ? axis : "related";
   activeVoiceEffectAxis = axis;
   activePolicyEffectAxis = axis;
@@ -2100,18 +2597,77 @@ function buildFreePolicyTarget(text, scale = activeFreePolicyScale) {
   const scaleLabel = scaleLabels[scale] || scaleLabels.standard;
   const trimmedText = text.trim();
   const title = trimmedText.length > 30 ? `${trimmedText.slice(0, 30)}...` : trimmedText;
+  const domain = inferPolicyDomain({ title: trimmedText, summary: trimmedText });
+  const domainGuidance = policyDomainGuidance(domain);
+  if (domain === "defense_security") {
+    return {
+      id: `free_policy_${Date.now()}`,
+      title,
+      sourceText: trimmedText,
+      fit: scale === "large" ? 70 : scale === "small" ? 64 : 67,
+      metrics: ["安全保障・抑止", "国際信頼度", "防衛産業基盤", "財政余力", "実装リスク"],
+      summary: `${trimmedText}。自由記述から作成した${scaleLabel}規模の防衛・安全保障政策ターゲットです。抑止力、防衛産業、国際関係、財政負担、倫理・安全管理を中心に仮説分析します。`,
+      field: domainGuidance.label,
+      relatedMetricIds: ["support", "externalReputation", "externalAchievements", "manufacturingImpact", "economicRipple", "fiscalCapacity", "implementationRisk", "safetyTrust"],
+      recommendedViews: ["international", "industry", "fiscal", "implementation", "clusters"],
+      fundingNote: "防衛装備・研究開発・調達体制に継続的な予算が必要になりやすいため、財源規模、調達透明性、費用対効果を重点確認します。",
+      designIssues: [
+        {
+          id: "deterrence_ethics",
+          title: "抑止力と倫理",
+          axisA: "抑止力・技術優位を優先する",
+          axisB: "軍拡・自律兵器化の抑制を優先する",
+          description: "防衛力強化の必要性と、兵器利用・自律判断・平和主義への懸念が対立しやすい争点です。",
+          watchPoints: ["人間の関与", "使用基準", "説明責任"],
+        },
+        {
+          id: "domestic_industry_procurement",
+          title: "国内産業育成と調達透明性",
+          axisA: "国内防衛産業を育成する",
+          axisB: "費用対効果と透明な調達を優先する",
+          description: "産業基盤の強化は期待される一方、随意契約、コスト膨張、既得権化への警戒が出やすくなります。",
+          watchPoints: ["調達方式", "中小企業参加", "監査"],
+        },
+        {
+          id: "alliance_regional_balance",
+          title: "同盟強化と地域緊張",
+          axisA: "米国など同盟国との連携を強める",
+          axisB: "中国・近隣国との緊張拡大を抑える",
+          description: "国際関係では、同盟国からの信頼向上と周辺国の警戒・報復リスクを分けて見る必要があります。",
+          watchPoints: ["輸出管理", "外交説明", "危機管理"],
+        },
+      ],
+    };
+  }
   return {
     id: `free_policy_${Date.now()}`,
     title,
+    sourceText: trimmedText,
     fit: scale === "large" ? 61 : scale === "small" ? 68 : 64,
-    metrics: ["政策納得度", "経済波及効果", "財政余力", "行政現場負荷"],
-    summary: `${trimmedText}。自由記述から作成した${scaleLabel}規模の政策ターゲットです。初期段階では、関連指標と国民・ステークホルダー反応を仮説として分析します。`,
-    field: "自由記述・AI生成分野",
-    relatedMetricIds: ["support", "economicRipple", "fiscalCapacity", "teacherSatisfaction"],
-    recommendedViews: scale === "large" ? ["fiscal", "industry", "generation", "clusters"] : ["industry", "income", "fiscal", "clusters"],
-    fundingNote: scale === "large"
-      ? "大規模政策として、財源規模・実施体制・移行期間の制約を強めに確認します。"
-      : "詳細な財源規模は政策案生成時に確認します。",
+    metrics: ["AIが関連指標を推論", "AIが効果軸を推論", "AIが利害関係者を推論"],
+    summary: `${trimmedText}。自由記述から作成した${scaleLabel}規模の政策ターゲットです。既知分野へ固定せず、AI生成時に分野・関連指標・国民やステークホルダー反応を推論します。`,
+    field: domainGuidance.label,
+    relatedMetricIds: [],
+    recommendedViews: ["clusters"],
+    fundingNote: "自由記述政策はAI接続時のみ生成します。固定サンプルでは声の分析や政策案生成は行いません。",
+    designIssues: [
+      {
+        id: "scope",
+        title: "AIによる争点推論",
+        axisA: "政策本文から自由に論点化する",
+        axisB: "既存プリセットの分野へ寄せない",
+        description: "未分類政策では、対象範囲や反発層を固定テンプレートで決めず、AI生成時に政策本文から推論します。",
+        watchPoints: ["政策分野", "直接影響を受ける主体", "制度設計上の争点"],
+      },
+      {
+        id: "validation",
+        title: "推論結果の確認",
+        axisA: "AIが選んだ関連指標を採用する",
+        axisB: "チャットで関連指標・効果軸を修正する",
+        description: "AIの初回推論後、ユーザーがチャットで分野、関連指標、対象層を調整できるようにします。",
+        watchPoints: ["関連指標", "推奨ビュー", "声の偏り"],
+      },
+    ],
   };
 }
 
@@ -2133,7 +2689,9 @@ function upsertFreePolicyTarget(policyTarget) {
   appData.issueSelectionChat.messages.push({ role: "user", text: `自由記述政策「${policyTarget.title}」を追加しました。` });
   appData.issueSelectionChat.messages.push({
     role: "assistant",
-    text: `自由記述を政策ターゲット化しました。関連指標は ${policyTarget.metrics.join(" / ")}、推奨ビューは ${policyTarget.recommendedViews.join(" / ")} です。${policyTarget.fundingNote}`,
+    text: requiresAiFreeInference(policyTarget)
+      ? `自由記述を政策ターゲット化しました。自由記述は固定サンプルでは生成せず、「声の分析へ進む」以降はAI接続時のみ実行します。${policyTarget.fundingNote}`
+      : `自由記述を政策ターゲット化しました。関連指標は ${policyTarget.metrics.join(" / ")}、推奨ビューは ${policyTarget.recommendedViews.join(" / ")} です。${policyTarget.fundingNote}`,
   });
   resetPolicyDrivenViews(policyTarget);
 }
@@ -2146,6 +2704,7 @@ function clearNationalGeneratedOutputs() {
   if (!isNationalScenario()) return;
   appData.voices = [];
   appData.voiceAnalysis = null;
+  appData.segmentEffects = {};
   appData.policy = emptyPolicyDraft();
   appData.policyChat = {
     title: "政策案をチャットで調整",
@@ -2160,8 +2719,121 @@ function clearNationalGeneratedOutputs() {
   appData.memory = null;
 }
 
+function inferPolicyDirection(policyTarget = selectedPolicyTarget()) {
+  const text = `${policyTarget?.title || ""} ${policyTarget?.summary || ""}`.toLowerCase();
+  const burdenIncreasePatterns = ["増税", "税率引き上げ", "税率を上げ", "負担増", "保険料増", "自己負担増", "給付削減", "減額"];
+  const burdenDecreasePatterns = ["減税", "引き下げ", "負担軽減", "給付", "補助", "無償化", "支援"];
+  if (burdenIncreasePatterns.some((pattern) => text.includes(pattern))) return "burden_increase";
+  if (burdenDecreasePatterns.some((pattern) => text.includes(pattern))) return "burden_decrease";
+  return "neutral_reform";
+}
+
 function sampleNationalVoices(policyTarget) {
   const title = policyTarget?.title || "この政策";
+  if (inferPolicyDomain(policyTarget) === "defense_security") {
+    return [
+      {
+        id: "voice_security_conservative",
+        name: "地方都市の50代保守層",
+        group: "保守層・安全保障重視・中間所得",
+        mood: "条件付き支持",
+        text: `${title}は周辺国の軍事的圧力を考えると必要性はある。攻撃目的ではなく抑止と隊員の安全確保が目的だと明確にし、調達費用を透明にしてほしい。`,
+        avatar: { slot: "green", label: "保" },
+      },
+      {
+        id: "voice_pacifist_progressive",
+        name: "都市部の30代リベラル層",
+        group: "リベラル層・平和主義・人権重視",
+        mood: "反対",
+        text: `${title}は軍拡競争や自律兵器化につながるのではないかと不安が強い。人間の判断を必ず残すのか、民間人被害をどう防ぐのかが見えないと支持できない。`,
+        avatar: { slot: "rose", label: "平" },
+      },
+      {
+        id: "voice_defense_industry",
+        name: "防衛関連メーカーの技術者",
+        group: "製造業・防衛産業・技術職",
+        mood: "期待",
+        text: `${title}で国内の技術開発や部品サプライチェーンが強くなる可能性はある。ただ、短期発注だけでは人材も設備も育たないので、輸出管理と長期調達計画をセットにしてほしい。`,
+        avatar: { slot: "sky", label: "産" },
+      },
+      {
+        id: "voice_fiscal_watchdog",
+        name: "財政規律を重視する無党派層",
+        group: "無党派・財政規律重視・高所得寄り",
+        mood: "強い慎重",
+        text: `${title}の必要性は否定しないが、防衛調達は費用が膨らみやすい。社会保障や教育を削ってまで進めるのか、費用対効果と監査の仕組みを先に示すべきだ。`,
+        avatar: { slot: "rose", label: "財" },
+      },
+      {
+        id: "voice_base_region",
+        name: "基地周辺自治体の40代住民",
+        group: "地方・基地周辺・生活安全重視",
+        mood: "不安",
+        text: `${title}で訓練や実証実験が地元に来るなら、事故、騒音、電波障害、情報漏えいが心配になる。地域説明と補償、安全基準がないまま進むのは困る。`,
+        avatar: { slot: "rose", label: "地" },
+      },
+      {
+        id: "voice_young_indifferent_security",
+        name: "政治ニュースをあまり追わない20代",
+        group: "若年層・低関心・安全保障不安",
+        mood: "低関心",
+        text: `${title}と言われても普段の生活とのつながりは分かりにくい。ただ、戦争に近づく政策なのか、日本を守る政策なのかは簡単に説明してほしい。`,
+        avatar: { slot: "green", label: "若" },
+      },
+    ];
+  }
+  if (inferPolicyDirection(policyTarget) === "burden_increase") {
+    return [
+      {
+        id: "voice_low_income_opposition",
+        name: "地方都市の30代低所得世帯",
+        group: "低所得層・子育て世帯・生活防衛志向",
+        mood: "反対",
+        text: `${title}は家計に直撃する。財政が厳しいのは分かるが、食品や日用品まで負担が増えるなら今の生活を削るしかない。`,
+        avatar: { slot: "rose", label: "低" },
+      },
+      {
+        id: "voice_middle_income_skeptic",
+        name: "都市部の40代中間層会社員",
+        group: "中間層・無党派・家計負担警戒",
+        mood: "強い慎重",
+        text: `${title}で社会保障が安定すると言われても、賃上げが追いつかない中では納得しにくい。使途と補償策がないと支持できない。`,
+        avatar: { slot: "sky", label: "中" },
+      },
+      {
+        id: "voice_pensioner_anxiety",
+        name: "年金生活の70代",
+        group: "高齢層・固定収入・医療介護依存",
+        mood: "不安",
+        text: `年金は大きく増えないのに${title}となると、食費や医療周辺の支出が重くなる。社会保障のためと言われても生活実感は厳しい。`,
+        avatar: { slot: "rose", label: "高" },
+      },
+      {
+        id: "voice_fiscal_conservative_support",
+        name: "財政規律を重視する保守層",
+        group: "保守層・財政規律重視・高所得寄り",
+        mood: "条件付き支持",
+        text: `${title}は将来世代への先送りを減らす意味では理解できる。ただし低所得層への還付や社会保障目的の明確化がなければ政治的に持たない。`,
+        avatar: { slot: "green", label: "財" },
+      },
+      {
+        id: "voice_retail_business_concern",
+        name: "小売業の経営者",
+        group: "中小企業・小売業・実務層",
+        mood: "反対寄り",
+        text: `${title}で消費が冷え込むのが怖い。価格転嫁、レジ改修、説明対応も発生し、現場負担と売上減が同時に来る可能性がある。`,
+        avatar: { slot: "sky", label: "店" },
+      },
+      {
+        id: "voice_indifferent_resigned",
+        name: "政治ニュースをあまり追わない20代",
+        group: "若年層・無関心層・低政治関与",
+        mood: "諦め",
+        text: `${title}と言われても止められない気がする。ただ、毎日の支払いが増えるなら不満はある。何に使われるかは正直よく分からない。`,
+        avatar: { slot: "green", label: "無" },
+      },
+    ];
+  }
   return [
     {
       id: "voice_household_support",
@@ -2203,11 +2875,266 @@ function sampleNationalVoices(policyTarget) {
       text: `${title}と言われても、自分の生活にいつ何が起きるのか分かりにくい。説明が簡単なら少しは関心を持てる。`,
       avatar: { slot: "green", label: "無" },
     },
+    {
+      id: "voice_local_operator",
+      name: "地方自治体の実務担当者",
+      group: "行政現場・地方・実装負担",
+      mood: "条件付き慎重",
+      text: `${title}を進めるなら、現場にどんな事務や説明責任が増えるのかを先に知りたい。国の制度設計が曖昧だと、問い合わせ対応だけが自治体に残る。`,
+      avatar: { slot: "sky", label: "行" },
+    },
   ];
+}
+
+function scaleNationalClusterSizes(clusters = [], sampledOpinionCount) {
+  const currentTotal = clusters.reduce((sum, cluster) => sum + Number(cluster.size || 0), 0);
+  if (!clusters.length || currentTotal >= 800) return clusters;
+  let remaining = sampledOpinionCount;
+  return clusters.map((cluster, index) => {
+    const isLast = index === clusters.length - 1;
+    const scaled = isLast ? remaining : Math.max(1, Math.round((Number(cluster.size || 1) / Math.max(currentTotal, 1)) * sampledOpinionCount));
+    remaining -= scaled;
+    return { ...cluster, size: scaled };
+  });
+}
+
+function normalizeNationalHierarchySizes(node, clusterSizeById, sampledOpinionCount, isRoot = true) {
+  if (!node) return node;
+  const children = (node.children || []).map((child) => normalizeNationalHierarchySizes(child, clusterSizeById, sampledOpinionCount, false));
+  const childTotal = children.reduce((sum, child) => sum + Number(child.size || 0), 0);
+  const ownSize = node.clusterId && clusterSizeById[node.clusterId] ? clusterSizeById[node.clusterId] : isRoot ? sampledOpinionCount : childTotal || Number(node.size || 0);
+  return { ...node, size: ownSize, children };
+}
+
+function normalizeNationalVoiceAnalysis(analysis, voices = []) {
+  if (!analysis || !isNationalScenario()) return analysis;
+  const representativeCount = voices.length || 10;
+  const sampledOpinionCount = Number(analysis.sampledOpinionCount) >= 800 ? Math.round(Number(analysis.sampledOpinionCount)) : Math.max(1200, representativeCount * 120);
+  const populationSize = Number(analysis.populationSize) >= 1000000 ? Math.round(Number(analysis.populationSize)) : 125000000;
+  const clusters = scaleNationalClusterSizes(analysis.clusters || [], sampledOpinionCount);
+  const clusterSizeById = Object.fromEntries(clusters.map((cluster) => [cluster.id, cluster.size]));
+  return {
+    ...analysis,
+    populationSize,
+    sampledOpinionCount,
+    clusters,
+    hierarchy: normalizeNationalHierarchySizes(analysis.hierarchy, clusterSizeById, sampledOpinionCount),
+  };
+}
+
+function normalizeNationalGeneratedState() {
+  if (isNationalScenario() && appData?.voiceAnalysis) {
+    appData.voiceAnalysis = normalizeNationalVoiceAnalysis(appData.voiceAnalysis, appData.voices || []);
+  }
 }
 
 function sampleNationalVoiceAnalysis(policyTarget, voices) {
   const title = policyTarget?.title || "対象政策";
+  if (inferPolicyDomain(policyTarget) === "defense_security") {
+    return {
+      populationSize: 125000000,
+      sampledOpinionCount: 1600,
+      embeddingModel: "national-policy-target-mock",
+      clusters: [
+        {
+          id: "deterrence_support",
+          label: "抑止力強化への条件付き支持",
+          size: 380,
+          sentiment: 0.36,
+          x: 84,
+          y: 74,
+          keywords: ["抑止力", "周辺国", "隊員安全", "同盟"],
+          summary: "安全保障環境の悪化を前提に、防衛力強化を必要と見るが、目的限定と説明責任を求める層。",
+          representativeVoiceIds: ["voice_security_conservative"],
+        },
+        {
+          id: "pacifist_ethics_opposition",
+          label: "軍拡・倫理への反対",
+          size: 330,
+          sentiment: -0.7,
+          x: 140,
+          y: 188,
+          keywords: ["軍拡", "自律兵器", "平和主義", "民間人被害"],
+          summary: "防衛ドローンの兵器化や自律判断が、平和主義・人権・国際緊張に反すると警戒する層。",
+          representativeVoiceIds: ["voice_pacifist_progressive"],
+        },
+        {
+          id: "industrial_base_expectation",
+          label: "防衛産業基盤への期待",
+          size: 260,
+          sentiment: 0.42,
+          x: 278,
+          y: 82,
+          keywords: ["防衛産業", "技術開発", "サプライチェーン", "人材"],
+          summary: "国内製造業や技術基盤の強化を期待する一方、長期調達と輸出管理を条件にする層。",
+          representativeVoiceIds: ["voice_defense_industry"],
+        },
+        {
+          id: "fiscal_procurement_warning",
+          label: "財政・調達透明性の懸念",
+          size: 250,
+          sentiment: -0.38,
+          x: 306,
+          y: 154,
+          keywords: ["防衛費", "調達", "監査", "費用対効果"],
+          summary: "必要性を一部認めつつ、防衛費の膨張、随意契約、他予算への圧迫を警戒する層。",
+          representativeVoiceIds: ["voice_fiscal_watchdog"],
+        },
+        {
+          id: "local_safety_concern",
+          label: "地域安全・実証実験への不安",
+          size: 210,
+          sentiment: -0.46,
+          x: 236,
+          y: 232,
+          keywords: ["基地周辺", "事故", "騒音", "補償"],
+          summary: "訓練・実験・配備の現場になる地域で、安全基準、補償、説明を求める層。",
+          representativeVoiceIds: ["voice_base_region"],
+        },
+        {
+          id: "low_attention_security",
+          label: "低関心・説明待ち",
+          size: 170,
+          sentiment: -0.08,
+          x: 374,
+          y: 214,
+          keywords: ["分かりにくい", "戦争不安", "生活実感", "説明"],
+          summary: "直接の生活影響が見えず関心は低いが、戦争リスクや目的の説明次第で反応が変わる層。",
+          representativeVoiceIds: ["voice_young_indifferent_security"],
+        },
+      ],
+      distances: [
+        { from: "deterrence_support", to: "industrial_base_expectation", distance: 0.34, label: "防衛力強化と産業育成で近い" },
+        { from: "deterrence_support", to: "pacifist_ethics_opposition", distance: 0.82, label: "抑止力と軍拡懸念で対立" },
+        { from: "fiscal_procurement_warning", to: "industrial_base_expectation", distance: 0.46, label: "調達透明性で接続" },
+        { from: "local_safety_concern", to: "pacifist_ethics_opposition", distance: 0.52, label: "安全・倫理への不安が近い" },
+        { from: "low_attention_security", to: "deterrence_support", distance: 0.66, label: "目的説明で接近余地" },
+      ],
+      hierarchy: {
+        label: `${title}への反応`,
+        size: 1600,
+        children: [
+          {
+            label: "安全保障・産業を評価",
+            size: 640,
+            children: [
+              { label: "抑止力強化への条件付き支持", clusterId: "deterrence_support", size: 380 },
+              { label: "防衛産業基盤への期待", clusterId: "industrial_base_expectation", size: 260 },
+            ],
+          },
+          {
+            label: "慎重・反対",
+            size: 790,
+            children: [
+              { label: "軍拡・倫理への反対", clusterId: "pacifist_ethics_opposition", size: 330 },
+              { label: "財政・調達透明性の懸念", clusterId: "fiscal_procurement_warning", size: 250 },
+              { label: "地域安全・実証実験への不安", clusterId: "local_safety_concern", size: 210 },
+            ],
+          },
+          {
+            label: "低関心",
+            size: 170,
+            children: [
+              { label: "低関心・説明待ち", clusterId: "low_attention_security", size: 170 },
+            ],
+          },
+        ],
+      },
+    };
+  }
+  if (inferPolicyDirection(policyTarget) === "burden_increase") {
+    return {
+      populationSize: 125000000,
+      sampledOpinionCount: 1200,
+      embeddingModel: "national-policy-target-mock",
+      clusters: [
+        {
+          id: "household_opposition",
+          label: "家計負担への反対",
+          size: 470,
+          sentiment: -0.72,
+          x: 72,
+          y: 136,
+          keywords: ["家計負担", "物価", "低所得", "子育て"],
+          summary: "生活費の上昇を直接的な不利益として受け止め、補償策がなければ反対する層。",
+          representativeVoiceIds: ["voice_low_income_opposition", "voice_middle_income_skeptic"],
+        },
+        {
+          id: "fixed_income_anxiety",
+          label: "固定収入層の不安",
+          size: 230,
+          sentiment: -0.64,
+          x: 126,
+          y: 198,
+          keywords: ["年金", "医療", "介護", "固定収入"],
+          summary: "年金や固定収入の中で日常支出が増えることに強い不安を持つ層。",
+          representativeVoiceIds: ["voice_pensioner_anxiety"],
+        },
+        {
+          id: "fiscal_conditional_support",
+          label: "財政再建への条件付き支持",
+          size: 210,
+          sentiment: 0.18,
+          x: 252,
+          y: 94,
+          keywords: ["財政規律", "将来世代", "使途明確化", "還付"],
+          summary: "財政改善の必要性は認めるが、低所得層対策と使途限定を支持条件にする層。",
+          representativeVoiceIds: ["voice_fiscal_conservative_support"],
+        },
+        {
+          id: "business_consumption_concern",
+          label: "消費冷え込み・実務負担",
+          size: 170,
+          sentiment: -0.48,
+          x: 322,
+          y: 148,
+          keywords: ["消費減", "小売", "価格転嫁", "レジ対応"],
+          summary: "売上減と制度変更コストを警戒する事業者・実務層。",
+          representativeVoiceIds: ["voice_retail_business_concern"],
+        },
+        {
+          id: "resigned_low_attention",
+          label: "諦め・低理解",
+          size: 120,
+          sentiment: -0.28,
+          x: 372,
+          y: 222,
+          keywords: ["分からない", "諦め", "使途不信", "政治不信"],
+          summary: "強い賛否表明は少ないが、支払い増への不満と使途への不信を持つ層。",
+          representativeVoiceIds: ["voice_indifferent_resigned"],
+        },
+      ],
+      distances: [
+        { from: "household_opposition", to: "fixed_income_anxiety", distance: 0.24, label: "生活防衛で近い" },
+        { from: "household_opposition", to: "fiscal_conditional_support", distance: 0.72, label: "財政目的への評価が分かれる" },
+        { from: "business_consumption_concern", to: "household_opposition", distance: 0.46, label: "消費冷え込みへの懸念が接続" },
+        { from: "resigned_low_attention", to: "fixed_income_anxiety", distance: 0.58, label: "不満は近いが理解度が異なる" },
+      ],
+      hierarchy: {
+        label: `${title}への反応`,
+        size: 1200,
+        children: [
+          {
+            label: "反対・慎重",
+            size: 990,
+            children: [
+              { label: "家計負担への反対", clusterId: "household_opposition", size: 470 },
+              { label: "固定収入層の不安", clusterId: "fixed_income_anxiety", size: 230 },
+              { label: "消費冷え込み・実務負担", clusterId: "business_consumption_concern", size: 170 },
+              { label: "諦め・低理解", clusterId: "resigned_low_attention", size: 120 },
+            ],
+          },
+          {
+            label: "条件付き支持",
+            size: 210,
+            children: [
+              { label: "財政再建への条件付き支持", clusterId: "fiscal_conditional_support", size: 210 },
+            ],
+          },
+        ],
+      },
+    };
+  }
   return {
     populationSize: 125000000,
     sampledOpinionCount: 1200,
@@ -2291,28 +3218,132 @@ function sampleNationalVoiceAnalysis(policyTarget, voices) {
 
 function sampleNationalPolicyDraft(policyTarget = selectedPolicyTarget()) {
   const title = policyTarget?.title || "対象政策";
+  const isDefense = inferPolicyDomain(policyTarget) === "defense_security";
   const isDx = policyTarget?.id === "gov_dx";
   const isChild = policyTarget?.id === "child_support";
-  const budget = isDx ? 8200 : isChild ? 26000 : 42000;
-  const directLabel = isDx ? "共通基盤・システム整備" : isChild ? "対象世帯への給付拡充" : `${title}の時限実施`;
-  const supportLabel = isDx ? "自治体・行政現場の移行支援" : isChild ? "申請・給付事務" : "低所得層への補完策";
+  const isAutonomous = policyTarget?.id === "autonomous_driving";
+  const isBurdenIncrease = inferPolicyDirection(policyTarget) === "burden_increase";
+  if (isDefense) {
+    const budget = 32000;
+    return {
+      id: `initial_${policyTarget?.id || "defense_policy"}`,
+      title: `${title}の初期実施案`,
+      summary: `${title}を防衛・安全保障政策として検討し、抑止力、防衛産業基盤、調達透明性、倫理・安全管理、国際関係への影響を分けて確認する初期案。`,
+      primaryIssueId: policyTarget?.id || appData.issueSelectionChat.selectedIssueId,
+      secondaryIssueIds: [],
+      budget,
+      cashUse: Math.round(budget * 0.58),
+      financePlan: "短期は防衛関係費の重点配分と研究開発予算の組替えで始め、恒久化や量産段階では中期防衛力整備計画と歳出見直しで別途精査する。",
+      costBreakdown: [
+        {
+          id: "defense_rd_procurement",
+          label: "研究開発・試験調達",
+          amount: 18500,
+          unit: "億円",
+          costType: "研究開発・装備調達",
+          target: "防衛装備庁、自衛隊、防衛関連メーカー",
+          calculation: "試験機、センサー、通信、管制、評価設備を含む初期調達規模から概算",
+          fundingSource: "防衛関係費の重点配分、研究開発予算の組替え",
+          details: [
+            { label: "試験機・管制システム", amount: 9200, unit: "億円", memo: "実証機、地上管制、通信・暗号化基盤" },
+            { label: "AI・センサー研究", amount: 5600, unit: "億円", memo: "識別、航法、サイバー耐性、人間レビュー支援" },
+            { label: "評価・試験設備", amount: 3700, unit: "億円", memo: "安全試験、電波試験、ログ検証環境" },
+          ],
+        },
+        {
+          id: "governance_safety",
+          label: "使用基準・安全管理・監査",
+          amount: 5400,
+          unit: "億円",
+          costType: "制度設計・監査",
+          target: "政府、国会、第三者評価機関、配備地域",
+          calculation: "運用規程、監査、地域説明、事故対応、ログ保存体制を概算",
+          fundingSource: "防衛省関連経費と内閣官房・総務省連携枠",
+          details: [
+            { label: "使用基準・人間関与ルール", amount: 1200, unit: "億円", memo: "自律判断の制限、停止基準、説明責任" },
+            { label: "監査・ログ管理", amount: 1600, unit: "億円", memo: "調達監査、運用ログ、サイバー監査" },
+            { label: "地域説明・事故対応", amount: 2600, unit: "億円", memo: "基地周辺説明、補償、緊急停止体制" },
+          ],
+        },
+        {
+          id: "industry_supply_chain",
+          label: "国内産業・サプライチェーン支援",
+          amount: 8100,
+          unit: "億円",
+          costType: "産業基盤投資",
+          target: "製造業、電子部品、通信、ソフトウェア、中小企業",
+          calculation: "重要部品の国内調達、技術人材、セキュリティ認証支援を概算",
+          fundingSource: "経済安全保障関連予算、防衛産業支援枠",
+          details: [
+            { label: "重要部品の国内調達", amount: 3900, unit: "億円", memo: "センサー、半導体、通信部品の供給安定化" },
+            { label: "中小企業参入支援", amount: 1700, unit: "億円", memo: "認証、品質管理、契約支援" },
+            { label: "技術人材育成", amount: 2500, unit: "億円", memo: "AI、航空、サイバー、運用保守人材" },
+          ],
+        },
+      ],
+      implementationDetails: [
+        "運用目的を抑止・偵察・隊員安全確保に限定し、攻撃判断に人間の関与を必須にする使用基準を先に定める。",
+        "調達方式、費用対効果、随意契約の理由、第三者監査結果を公開できる範囲で定期公表する。",
+        "米国・EU・アジア諸国への説明、輸出管理、周辺国への危機管理チャネルを外交面の実施内容に含める。",
+        "基地周辺や実証地域では安全基準、事故補償、電波・騒音対策、住民説明を配備前条件にする。",
+      ],
+      expectedEffects: [
+        "抑止力と隊員安全への期待、防衛産業の技術基盤強化、製造業・通信・ソフトウェアへの波及が見込まれる。",
+        "同盟国からは役割分担の強化として評価されやすい一方、中国など周辺国からは警戒される可能性がある。",
+      ],
+      concerns: [
+        "軍拡競争、自律兵器化、民間人被害への倫理的懸念が強く出やすい。",
+        "防衛費の膨張、調達の不透明化、社会保障や教育など他予算への圧迫が批判されやすい。",
+        "事故、サイバー乗っ取り、訓練地域の負担が発生すると安全・責任信頼度が下がる。",
+      ],
+      beneficiaryGroups: [
+        { groupId: "security_conservative", label: "安全保障重視層", reason: "抑止力と隊員安全の向上を評価しやすい。" },
+        { groupId: "defense_industry", label: "防衛産業・製造業", reason: "研究開発、部品供給、長期調達への期待がある。" },
+      ],
+      lowBenefitGroups: [
+        { groupId: "pacifist_progressive", label: "平和主義・リベラル層", reason: "軍拡や自律兵器化への懸念が強い。" },
+        { groupId: "base_region", label: "基地周辺・実証地域", reason: "事故、騒音、電波障害、補償への不安が出やすい。" },
+      ],
+      shortTermEffects: {
+        support: -1,
+        externalReputation: 2,
+        externalAchievements: 4,
+        fiscalCapacity: -6,
+        economicRipple: 5,
+        manufacturingImpact: 8,
+        exportIndustryImpact: 3,
+        financeIndustryImpact: 1,
+        implementationRisk: -7,
+        safetyTrust: -4,
+      },
+      longTermEffects: {},
+      risks: ["軍拡批判", "調達費膨張", "自律兵器倫理", "地域安全不安", "周辺国の警戒"],
+    };
+  }
+  const budget = isDx ? 8200 : isChild ? 26000 : isAutonomous ? 18000 : 42000;
+  const directLabel = isDx ? "AI窓口基盤・回答管理システム" : isChild ? "対象世帯への給付拡充" : isAutonomous ? "自動運転実証・遠隔監視基盤" : `${title}の時限実施`;
+  const supportLabel = isDx ? "自治体・行政現場の移行支援と人間レビュー" : isChild ? "申請・給付事務" : isAutonomous ? "安全審査・地域説明・事故対応体制" : "低所得層への補完策";
   return {
     id: `initial_${policyTarget?.id || "free_policy"}`,
     title: `${title}の初期実施案`,
-    summary: `${title}を短期実行する前提で、対象範囲・財源補完・実施負荷を分けて検討する初期案。`,
+    summary: isBurdenIncrease
+      ? `${title}を検討する前提で、低所得層還付、使途限定、実施時期、消費冷え込み対策を同時に置く初期案。`
+      : `${title}を短期実行する前提で、対象範囲・財源補完・実施負荷を分けて検討する初期案。`,
     primaryIssueId: policyTarget?.id || appData.issueSelectionChat.selectedIssueId,
     secondaryIssueIds: [],
     budget,
     cashUse: Math.round(budget * 0.46),
-    financePlan: "短期は既存予算の組替えと国債・予備費を組み合わせ、恒久化は別途財源を精査する。",
+    financePlan: isBurdenIncrease
+      ? "増収分は社会保障目的に限定し、低所得層への還付と小規模事業者の移行費を先に控除して財政改善分を試算する。"
+      : "短期は既存予算の組替えと国債・予備費を組み合わせ、恒久化は別途財源を精査する。",
     costBreakdown: [
       {
         id: "core_policy_cost",
         label: directLabel,
         amount: Math.round(budget * 0.62),
         unit: "億円",
-        costType: isDx ? "システム投資" : "直接支出・税収影響",
-        target: isDx ? "国・自治体の行政基盤" : "主対象世帯・事業者",
+        costType: isDx ? "AIシステム投資" : isAutonomous ? "実証・インフラ投資" : "直接支出・税収影響",
+        target: isDx ? "国・自治体の行政基盤" : isAutonomous ? "自治体・交通事業者・物流事業者" : "主対象世帯・事業者",
         calculation: "対象範囲と1年分の実施規模から概算",
         fundingSource: "既存予算組替え、予備費、短期国債",
         details: [
@@ -2349,49 +3380,421 @@ function sampleNationalPolicyDraft(policyTarget = selectedPolicyTarget()) {
         ],
       },
     ],
-    implementationDetails: [
-      `${title}の対象範囲、実施期間、除外条件を最初に明文化する。`,
-      "所得別・世代別・産業別の影響を毎月モニタリングする。",
-      "低便益または不利益が出やすい層には補完策と説明導線を用意する。",
-    ],
-    expectedEffects: [
-      "短期的な政策納得度と生活・事務負担の改善を狙う。",
-      "産業別・所得別の効果差を見える化し、修正余地を残す。",
-    ],
-    concerns: [
-      "財源補填が弱いと財政余力への懸念が強まる。",
-      "対象範囲が曖昧だと無関心層や実務層に伝わりにくい。",
-    ],
-    beneficiaryGroups: [
-      { groupId: "middle_income", label: "中間層", reason: "生活・手続き負担の改善を比較的広く実感しやすい。" },
-      { groupId: "progressive", label: "リベラル層", reason: "再分配や制度改善の方向性を評価しやすい。" },
-    ],
-    lowBenefitGroups: [
-      { groupId: "fiscal_conservative", label: "財政規律重視層", reason: "財源補填と恒久化リスクへの懸念が残る。" },
-      { groupId: "indifferent", label: "無関心層", reason: "生活上の変化が分かりにくいと関心を持ちにくい。" },
-    ],
-    shortTermEffects: {
-      support: 5,
-      economicRipple: isDx ? 4 : 6,
-      fiscalCapacity: -4,
-      teacherSatisfaction: isDx ? 6 : -1,
-      importIndustryImpact: 2,
-      exportIndustryImpact: 1,
-      manufacturingImpact: isDx ? 4 : 2,
-      agricultureImpact: isChild ? 3 : 1,
-      financeIndustryImpact: isDx ? 5 : -1,
-    },
+    implementationDetails: isDx
+      ? [
+          "住民向けAI回答は一次案内に限定し、給付・税・福祉など不利益が出る判断は職員確認を必須にする。",
+          "誤回答、個人情報、ログ保存、委託先管理、人間レビュー範囲を運用規程として明文化する。",
+          "高齢者・障害者・外国人・デジタル非利用層向けに、対面窓口と電話窓口を維持する。",
+          "実装リスク、デジタル利用度、行政現場負荷、安全・責任信頼度を毎月レビューする。",
+        ]
+      : isAutonomous
+        ? [
+            "地方交通空白地と物流幹線を分け、走行区域、速度、天候条件、遠隔監視体制を段階的に設定する。",
+            "事故時の責任分担、保険、ログ提出、運行停止基準を許認可条件に入れる。",
+            "運転職の転換支援、自治体説明、住民試乗、苦情処理窓口を実証前に整備する。",
+            "地域交通維持、安全・責任信頼度、実装リスク、産業別影響をレビューする。",
+          ]
+        : [
+            `${title}の対象範囲、実施期間、除外条件を最初に明文化する。`,
+            "所得別・世代別・産業別の影響を毎月モニタリングする。",
+            "低便益または不利益が出やすい層には補完策と説明導線を用意する。",
+          ],
+    expectedEffects: isBurdenIncrease
+      ? [
+          "財政余力と社会保障財源の安定にはプラスに働く。",
+          "低所得層還付と使途限定を組み合わせない限り、家計負担感と政策支持は悪化しやすい。",
+        ]
+      : [
+          isDx ? "問い合わせ一次対応と職員検索支援により、窓口待ち時間と職員の調査負担を下げる。" : isAutonomous ? "地方交通維持と物流人手不足の緩和に短期効果を出す。" : "短期的な政策納得度と生活・事務負担の改善を狙う。",
+          isDx ? "デジタル利用度が高い層では利便性が上がるが、非利用層には対面代替が必要。" : isAutonomous ? "製造・通信・保険など周辺産業にはプラスだが、運転職と安全規制の調整が必要。" : "産業別・所得別の効果差を見える化し、修正余地を残す。",
+        ],
+    concerns: isBurdenIncrease
+      ? [
+          "低所得層・子育て世帯・年金生活者の可処分所得が下がりやすい。",
+          "小売・外食など内需産業では消費冷え込みと価格表示対応が同時に発生する。",
+        ]
+      : [
+          isDx ? "誤回答や個人情報事故が起きると、安全・責任信頼度と政策納得度が大きく下がる。" : isAutonomous ? "事故時の責任分担が曖昧だと、地域交通の便益より安全不安が上回る。" : "財源補填が弱いと財政余力への懸念が強まる。",
+          isDx ? "デジタル利用度の低い層には、利便性改善より排除感が出る可能性がある。" : isAutonomous ? "遠隔監視や道路・通信インフラの整備が遅れると、実装リスクが高止まりする。" : "対象範囲が曖昧だと無関心層や実務層に伝わりにくい。",
+        ],
+    beneficiaryGroups: isBurdenIncrease
+      ? [
+          { groupId: "fiscal_conservative", label: "財政規律重視層", reason: "社会保障目的と将来世代負担の抑制を条件に評価しやすい。" },
+          { groupId: "high_income", label: "高所得層の一部", reason: "相対的な家計負担の痛みが小さく、財政安定を重視する層では受け入れ余地がある。" },
+        ]
+      : [
+          { groupId: isDx ? "digital_users" : isAutonomous ? "regional_residents" : "middle_income", label: isDx ? "デジタル利用層・現役世代" : isAutonomous ? "地方部の移動困難層" : "中間層", reason: isDx ? "オンライン問い合わせや申請案内の時短を実感しやすい。" : isAutonomous ? "通院・買い物・通学などの移動手段維持に便益が出やすい。" : "生活・手続き負担の改善を比較的広く実感しやすい。" },
+          { groupId: isDx ? "public_workers" : isAutonomous ? "mobility_industry" : "progressive", label: isDx ? "行政職員・自治体現場" : isAutonomous ? "交通・物流・製造関連産業" : "リベラル層", reason: isDx ? "回答候補の検索、FAQ整理、繁忙期対応の負担軽減が期待できる。" : isAutonomous ? "実証、車両、センサー、保険、運行管理で新たな需要が出る。" : "再分配や制度改善の方向性を評価しやすい。" },
+        ],
+    lowBenefitGroups: isBurdenIncrease
+      ? [
+          { groupId: "low_income", label: "低所得層", reason: "消費支出が所得に占める割合が高く、負担増を強く受ける。" },
+          { groupId: "retail", label: "小売・外食事業者", reason: "消費冷え込み、価格転嫁、レジ改修などの負担が重なる。" },
+        ]
+      : [
+          { groupId: isDx ? "digital_low_access" : isAutonomous ? "drivers" : "fiscal_conservative", label: isDx ? "デジタル利用が難しい層" : isAutonomous ? "運転職・既存交通事業者" : "財政規律重視層", reason: isDx ? "AI窓口への移行が対面支援の縮小に見えると不利益感が出る。" : isAutonomous ? "雇用転換、責任分担、既存路線との競合に不安が出やすい。" : "財源補填と恒久化リスクへの懸念が残る。" },
+          { groupId: isDx ? "privacy_concern" : isAutonomous ? "safety_concern" : "indifferent", label: isDx ? "個人情報・監視懸念層" : isAutonomous ? "安全性を重視する住民" : "無関心層", reason: isDx ? "相談履歴や行政データのAI利用に不安を持ちやすい。" : isAutonomous ? "事故時の責任と補償が曖昧だと受容しにくい。" : "生活上の変化が分かりにくいと関心を持ちにくい。" },
+        ],
+    shortTermEffects: isBurdenIncrease
+      ? {
+          support: -8,
+          happiness: -5,
+          fairness: -4,
+          economicRipple: -6,
+          fiscalCapacity: 7,
+          socialSecurity: 5,
+          importIndustryImpact: -3,
+          exportIndustryImpact: 0,
+          manufacturingImpact: -2,
+          agricultureImpact: -2,
+          financeIndustryImpact: 2,
+          teacherSatisfaction: -2,
+        }
+      : {
+          support: 5,
+          economicRipple: isDx ? 4 : 6,
+          fiscalCapacity: -4,
+          teacherSatisfaction: isDx ? 6 : isAutonomous ? -2 : -1,
+          digitalUtilization: isDx ? 9 : isAutonomous ? 3 : 1,
+          implementationRisk: isDx ? -5 : isAutonomous ? -7 : -2,
+          safetyTrust: isDx ? -3 : isAutonomous ? -5 : 0,
+          regionalMobility: isAutonomous ? 8 : 0,
+          importIndustryImpact: 2,
+          exportIndustryImpact: 1,
+          manufacturingImpact: isDx ? 4 : isAutonomous ? 6 : 2,
+          agricultureImpact: isChild ? 3 : 1,
+          financeIndustryImpact: isDx ? 5 : isAutonomous ? 4 : -1,
+        },
     longTermEffects: { trust: 2, polarization: -1, fatigue: 1, publicValue: 3 },
     risks: ["財源補填不足", "対象範囲の説明不足", "実施現場の負荷増"],
   };
+}
+
+function sampleNationalSegmentEffects(policyTarget = selectedPolicyTarget()) {
+  if (inferPolicyDomain(policyTarget) === "defense_security") {
+    return {
+      international: [
+        { segmentId: "us_alliance", segmentLabel: "アメリカ・同盟国", axis: "international", applicability: "applicable", effectScore: 5, benefitLevel: "medium", riskLevel: "medium", summary: "役割分担の強化として評価されやすいが、運用基準と輸出管理の透明性が問われる。", reason: "防衛装備と共同運用は同盟信頼に直結するため" },
+        { segmentId: "china_region", segmentLabel: "中国・周辺国", axis: "international", applicability: "applicable", effectScore: -6, benefitLevel: "none", riskLevel: "high", summary: "軍拡や監視強化と受け止められ、外交的な警戒や対抗措置を招く可能性がある。", reason: "ドローン兵器は地域の軍事バランスに影響しやすいため" },
+        { segmentId: "eu_rules", segmentLabel: "EU・国際規範", axis: "international", applicability: "applicable", effectScore: -1, benefitLevel: "low", riskLevel: "medium", summary: "人間の関与、AI倫理、輸出管理を明確にすれば批判を抑えやすい。", reason: "自律兵器やAI利用への規範形成が進んでいるため" },
+      ],
+      industry: [
+        { segmentId: "defense_manufacturing", segmentLabel: "防衛・製造業", axis: "industry", applicability: "applicable", effectScore: 8, benefitLevel: "high", riskLevel: "medium", summary: "センサー、通信、航空、ソフトウェアに需要が出る。", reason: "国内防衛産業基盤とサプライチェーンに直接投資されるため" },
+        { segmentId: "dual_use_it", segmentLabel: "IT・通信・サイバー", axis: "industry", applicability: "applicable", effectScore: 6, benefitLevel: "medium", riskLevel: "medium", summary: "管制、暗号化、AI、ログ監査の需要が増える一方、サイバー責任が重くなる。", reason: "遠隔運用とAI支援に通信・サイバー基盤が不可欠なため" },
+        { segmentId: "civilian_industry", segmentLabel: "民生産業", axis: "industry", applicability: "applicable", effectScore: -2, benefitLevel: "low", riskLevel: "medium", summary: "軍事転用イメージや輸出管理で取引先から慎重に見られる可能性がある。", reason: "防衛用途と民生用途の境界が問われるため" },
+      ],
+      fiscal: [
+        { segmentId: "defense_budget", segmentLabel: "防衛費・財政余力", axis: "fiscal", applicability: "applicable", effectScore: -7, benefitLevel: "none", riskLevel: "high", summary: "研究開発と調達が継続費になりやすく、財政余力を圧迫する。", reason: "装備開発は初期費だけでなく維持・更新費も大きいため" },
+        { segmentId: "procurement_audit", segmentLabel: "調達監査", axis: "fiscal", applicability: "applicable", effectScore: -3, benefitLevel: "low", riskLevel: "high", summary: "監査を強めないと費用膨張や既得権化への批判が出やすい。", reason: "防衛調達は競争性と透明性が争点になりやすいため" },
+      ],
+      implementation: [
+        { segmentId: "human_control", segmentLabel: "人間の関与・使用基準", axis: "implementation", applicability: "applicable", effectScore: -6, benefitLevel: "none", riskLevel: "high", summary: "攻撃判断や停止基準が曖昧だと倫理批判と安全不安が強まる。", reason: "ドローン兵器では自律判断の範囲が政策受容を左右するため" },
+        { segmentId: "local_safety", segmentLabel: "配備・実証地域の安全", axis: "implementation", applicability: "applicable", effectScore: -5, benefitLevel: "none", riskLevel: "high", summary: "事故、騒音、電波障害、補償の設計が不十分だと地域反発が出る。", reason: "実験・訓練の負担は特定地域に集中しやすいため" },
+        { segmentId: "cyber_resilience", segmentLabel: "サイバー耐性", axis: "implementation", applicability: "applicable", effectScore: -4, benefitLevel: "low", riskLevel: "high", summary: "乗っ取りや通信妨害への対策が弱いと安全・責任信頼度が下がる。", reason: "遠隔運用装備はサイバー攻撃の影響を受けやすいため" },
+      ],
+      clusters: [
+        { segmentId: "security_support", segmentLabel: "安全保障重視層", axis: "clusters", applicability: "applicable", effectScore: 6, benefitLevel: "medium", riskLevel: "medium", summary: "抑止力強化として評価しやすい。", reason: "周辺国リスクを重視するため" },
+        { segmentId: "pacifist_opposition", segmentLabel: "平和主義・反軍拡層", axis: "clusters", applicability: "applicable", effectScore: -8, benefitLevel: "none", riskLevel: "high", summary: "軍拡、自律兵器、民間人被害への懸念から反対しやすい。", reason: "政策価値観と衝突しやすいため" },
+      ],
+    };
+  }
+  if (policyTarget?.id === "gov_dx") {
+    return {
+      implementation: [
+        { segmentId: "admin_frontline", segmentLabel: "行政窓口職員", axis: "implementation", applicability: "applicable", effectScore: 7, benefitLevel: "high", riskLevel: "medium", summary: "FAQ検索と回答案作成は負担軽減になるが、最終確認と苦情対応は残る。", reason: "AIを一次回答支援に限定すれば現場負荷を下げやすいため" },
+        { segmentId: "error_responsibility", segmentLabel: "誤回答・責任設計", axis: "implementation", applicability: "applicable", effectScore: -6, benefitLevel: "none", riskLevel: "high", summary: "誤回答時の責任分界が曖昧だと、政策納得度と安全・責任信頼度が下がる。", reason: "行政判断は不利益処分や給付漏れにつながり得るため" },
+        { segmentId: "vendor_ops", segmentLabel: "委託・システム運用", axis: "implementation", applicability: "applicable", effectScore: -3, benefitLevel: "low", riskLevel: "medium", summary: "ログ管理、モデル更新、自治体差分対応に継続コストが発生する。", reason: "AI導入後も運用・監査・契約管理が必要なため" },
+      ],
+      digital_access: [
+        { segmentId: "digital_users", segmentLabel: "デジタル利用層", axis: "digital_access", applicability: "applicable", effectScore: 10, benefitLevel: "high", riskLevel: "low", summary: "夜間・休日の問い合わせや申請案内を使いやすくなる。", reason: "オンライン導線とAI応答の相性が高いため" },
+        { segmentId: "elderly_low_access", segmentLabel: "高齢者・低デジタル利用層", axis: "digital_access", applicability: "applicable", effectScore: -5, benefitLevel: "none", riskLevel: "high", summary: "対面窓口縮小と受け止められると排除感が出る。", reason: "スマホ・認証・文章入力への負担が大きいため" },
+        { segmentId: "multilingual_disabled", segmentLabel: "外国人・障害者対応", axis: "digital_access", applicability: "applicable", effectScore: 4, benefitLevel: "medium", riskLevel: "medium", summary: "多言語・音声対応が整えば便益は大きいが、品質差が不信につながる。", reason: "支援設計の精度で効果が大きく変わるため" },
+      ],
+      generation: [
+        { segmentId: "age_18_29", segmentLabel: "18から29歳", axis: "generation", applicability: "applicable", effectScore: 6, benefitLevel: "medium", riskLevel: "low", summary: "オンライン完結への期待が高く、利便性を評価しやすい。", reason: "デジタル接点が多いため" },
+        { segmentId: "age_65_plus", segmentLabel: "65歳以上", axis: "generation", applicability: "applicable", effectScore: -4, benefitLevel: "low", riskLevel: "high", summary: "電話・対面窓口が残るかで評価が分かれる。", reason: "デジタル利用の負担が大きいため" },
+      ],
+      industry: [
+        { segmentId: "industry_finance", segmentLabel: "金融", axis: "industry", applicability: "applicable", effectScore: 4, benefitLevel: "medium", riskLevel: "medium", summary: "本人確認・行政手続き連携の効率化に期待がある。", reason: "行政データ連携の影響を受けやすいため" },
+        { segmentId: "industry_it", segmentLabel: "IT・BPO", axis: "industry", applicability: "applicable", effectScore: 8, benefitLevel: "high", riskLevel: "medium", summary: "AI基盤、運用監査、FAQ整備、コールセンター再設計の需要が出る。", reason: "導入・運用の外部委託が見込まれるため" },
+      ],
+      fiscal: [
+        { segmentId: "initial_cost", segmentLabel: "初期投資", axis: "fiscal", applicability: "applicable", effectScore: -4, benefitLevel: "low", riskLevel: "medium", summary: "短期はシステム・研修・監査費が先行する。", reason: "AI基盤と自治体展開に初期費用が必要なため" },
+        { segmentId: "operational_saving", segmentLabel: "運用効率化", axis: "fiscal", applicability: "applicable", effectScore: 5, benefitLevel: "medium", riskLevel: "medium", summary: "定型問い合わせが減れば中期的な業務効率化余地がある。", reason: "問い合わせ一次対応を自動化できるため" },
+      ],
+    };
+  }
+  if (policyTarget?.id === "autonomous_driving") {
+    return {
+      regional: [
+        { segmentId: "rural_mobility", segmentLabel: "地方交通空白地", axis: "regional", applicability: "applicable", effectScore: 10, benefitLevel: "high", riskLevel: "medium", summary: "通院・買い物・通学の移動手段維持に直接効果が出やすい。", reason: "運転手不足と路線維持困難が集中するため" },
+        { segmentId: "urban_area", segmentLabel: "都市部", axis: "regional", applicability: "applicable", effectScore: 2, benefitLevel: "low", riskLevel: "medium", summary: "混雑・歩行者・既存交通との調整が多く、短期便益は限定的。", reason: "運行環境が複雑なため" },
+      ],
+      implementation: [
+        { segmentId: "safety_rule", segmentLabel: "安全規制・許認可", axis: "implementation", applicability: "applicable", effectScore: -7, benefitLevel: "none", riskLevel: "high", summary: "事故責任、停止基準、遠隔監視ログの設計が不十分だと導入が止まりやすい。", reason: "安全・責任信頼度が政策受容を左右するため" },
+        { segmentId: "remote_monitoring", segmentLabel: "遠隔監視体制", axis: "implementation", applicability: "applicable", effectScore: -4, benefitLevel: "low", riskLevel: "medium", summary: "監視人員、通信、緊急介入手順の整備に実装コストがかかる。", reason: "完全無人化までの運用負荷が残るため" },
+      ],
+      industry: [
+        { segmentId: "industry_manufacturing", segmentLabel: "製造業", axis: "industry", applicability: "applicable", effectScore: 7, benefitLevel: "high", riskLevel: "medium", summary: "車両、センサー、通信機器、運行管理システムで需要が増える。", reason: "自動運転関連投資が広がるため" },
+        { segmentId: "drivers", segmentLabel: "運転職・既存交通事業者", axis: "industry", applicability: "applicable", effectScore: -5, benefitLevel: "none", riskLevel: "high", summary: "雇用転換や既存路線との競合に不安が出やすい。", reason: "業務内容の再設計が必要になるため" },
+        { segmentId: "industry_finance", segmentLabel: "金融・保険", axis: "industry", applicability: "applicable", effectScore: 4, benefitLevel: "medium", riskLevel: "medium", summary: "保険商品、事故データ、責任分担の新市場が生まれる。", reason: "リスク評価の枠組みが変わるため" },
+      ],
+      generation: [
+        { segmentId: "age_65_plus", segmentLabel: "65歳以上", axis: "generation", applicability: "applicable", effectScore: 8, benefitLevel: "high", riskLevel: "medium", summary: "免許返納後の移動手段として期待が出やすい。", reason: "地方高齢者の移動課題に直結するため" },
+        { segmentId: "age_30_49", segmentLabel: "30から49歳", axis: "generation", applicability: "applicable", effectScore: 3, benefitLevel: "low", riskLevel: "medium", summary: "子どもの送迎や物流改善には期待するが、安全不安も見る。", reason: "利用者と保護者の両面で評価するため" },
+      ],
+      international: [
+        { segmentId: "international_competitiveness", segmentLabel: "国際競争力", axis: "international", applicability: "applicable", effectScore: 5, benefitLevel: "medium", riskLevel: "medium", summary: "制度整備が進めば技術実証と輸出競争力に寄与する。", reason: "標準化・実証データが国際展開に影響するため" },
+        { segmentId: "safety_reputation", segmentLabel: "安全規制への信頼", axis: "international", applicability: "applicable", effectScore: -2, benefitLevel: "low", riskLevel: "medium", summary: "事故や規制の曖昧さがあると国際的な信頼を下げる。", reason: "安全認証と事故対応が注視されるため" },
+      ],
+      digital_access: [
+        { segmentId: "mobility_app_users", segmentLabel: "配車アプリ利用層", axis: "digital_access", applicability: "applicable", effectScore: 5, benefitLevel: "medium", riskLevel: "low", summary: "予約・運行状況確認が整えば利用しやすい。", reason: "サービス利用にデジタル接点が必要なため" },
+        { segmentId: "non_digital_users", segmentLabel: "非デジタル利用層", axis: "digital_access", applicability: "applicable", effectScore: -3, benefitLevel: "none", riskLevel: "medium", summary: "電話予約や地域窓口がないと利用しにくい。", reason: "予約・本人確認がデジタル前提になりやすいため" },
+      ],
+    };
+  }
+  if (inferPolicyDirection(policyTarget) === "burden_increase") {
+    return {
+      income: [
+        { segmentId: "income_low", segmentLabel: "低所得層", axis: "income", applicability: "applicable", effectScore: -12, benefitLevel: "none", riskLevel: "high", summary: "消費支出の比率が高く、生活必需品への負担増を最も受けやすい。", reason: "所得に占める消費支出割合が高いため" },
+        { segmentId: "income_middle", segmentLabel: "中間層", axis: "income", applicability: "applicable", effectScore: -8, benefitLevel: "none", riskLevel: "high", summary: "家計負担増と賃上げ遅れへの不満が出やすい。", reason: "広い消費支出に税率上昇がかかるため" },
+        { segmentId: "income_high", segmentLabel: "高所得層", axis: "income", applicability: "applicable", effectScore: -3, benefitLevel: "low", riskLevel: "medium", summary: "負担額は増えるが、可処分所得への相対的影響は小さい。", reason: "所得に対する消費税負担比率が低めなため" },
+      ],
+      generation: [
+        { segmentId: "age_18_29", segmentLabel: "18から29歳", axis: "generation", applicability: "applicable", effectScore: -5, benefitLevel: "none", riskLevel: "medium", summary: "日常消費への負担増に不満はあるが、社会保障目的の理解は分かれる。", reason: "所得水準がまだ低い層が多いため" },
+        { segmentId: "age_30_49", segmentLabel: "30から49歳", axis: "generation", applicability: "applicable", effectScore: -10, benefitLevel: "none", riskLevel: "high", summary: "子育て・住宅・日用品支出が重なり、負担感が強く出る。", reason: "家族消費の規模が大きいため" },
+        { segmentId: "age_50_64", segmentLabel: "50から64歳", axis: "generation", applicability: "applicable", effectScore: -7, benefitLevel: "none", riskLevel: "medium", summary: "将来の社会保障安定は評価しつつ、現役負担増への警戒が残る。", reason: "負担増と将来不安が同時に作用するため" },
+        { segmentId: "age_65_plus", segmentLabel: "65歳以上", axis: "generation", applicability: "applicable", effectScore: -9, benefitLevel: "none", riskLevel: "high", summary: "固定収入の中で食費・医療周辺支出の負担増が重い。", reason: "年金収入が物価に追いつきにくいため" },
+      ],
+      industry: [
+        { segmentId: "industry_import", segmentLabel: "輸入業", axis: "industry", applicability: "applicable", effectScore: -4, benefitLevel: "none", riskLevel: "medium", summary: "消費財需要の落ち込みで販売数量が下がる可能性がある。", reason: "最終消費の冷え込みを受けやすいため" },
+        { segmentId: "industry_export", segmentLabel: "輸出業", axis: "industry", applicability: "low_relevance", effectScore: null, benefitLevel: "none", riskLevel: "low", summary: "直接影響は限定的だが、国内景況感の悪化は間接的に響く。", reason: "主な売上要因が外需と為替であるため" },
+        { segmentId: "industry_manufacturing", segmentLabel: "製造業", axis: "industry", applicability: "applicable", effectScore: -3, benefitLevel: "none", riskLevel: "medium", summary: "耐久消費財や生活関連製品で買い控えが起きやすい。", reason: "増税前後で需要の反動が出るため" },
+        { segmentId: "industry_agriculture", segmentLabel: "農業", axis: "industry", applicability: "applicable", effectScore: -2, benefitLevel: "none", riskLevel: "medium", summary: "食品需要は底堅いが、消費者の節約志向が強まる。", reason: "生活必需品でも価格感度が上がるため" },
+        { segmentId: "industry_finance", segmentLabel: "金融", axis: "industry", applicability: "applicable", effectScore: 2, benefitLevel: "low", riskLevel: "medium", summary: "財政安定期待は一部プラスだが、消費悪化で景気見通しは弱くなる。", reason: "財政評価と景気評価が逆方向に働くため" },
+      ],
+      fiscal: [
+        { segmentId: "fiscal_capacity", segmentLabel: "財政余力", axis: "fiscal", applicability: "applicable", effectScore: 8, benefitLevel: "high", riskLevel: "medium", summary: "増収により財政余力は改善するが、景気悪化時は税収見込みが下振れする。", reason: "税率上昇による増収効果があるため" },
+        { segmentId: "social_security", segmentLabel: "社会保障財源", axis: "fiscal", applicability: "applicable", effectScore: 6, benefitLevel: "medium", riskLevel: "medium", summary: "使途限定なら社会保障財源の安定に寄与する。", reason: "消費税収を社会保障へ充てる設計が可能なため" },
+      ],
+      implementation: [
+        { segmentId: "implementation_admin", segmentLabel: "行政・事業者対応", axis: "implementation", applicability: "applicable", effectScore: -6, benefitLevel: "none", riskLevel: "high", summary: "価格表示、レジ改修、相談対応、還付事務が同時に発生する。", reason: "税率変更と補償策の運用負荷が重なるため" },
+      ],
+      regional: [
+        { segmentId: "regional_local", segmentLabel: "地方部", axis: "regional", applicability: "applicable", effectScore: -6, benefitLevel: "none", riskLevel: "medium", summary: "車移動・生活必需品支出の比率が高く、負担増を感じやすい。", reason: "可処分所得と消費構造の影響を受けるため" },
+        { segmentId: "regional_urban", segmentLabel: "都市部", axis: "regional", applicability: "applicable", effectScore: -5, benefitLevel: "none", riskLevel: "medium", summary: "家賃以外の日常消費で負担増が広く出る。", reason: "サービス消費への支出が多いため" },
+      ],
+    };
+  }
+  return {
+    income: [
+      { segmentId: "income_low", segmentLabel: "低所得層", axis: "income", applicability: "applicable", effectScore: 8, benefitLevel: "medium", riskLevel: "medium", summary: "補完策が届く場合は短期便益が出る。", reason: "生活支出への影響が大きいため" },
+      { segmentId: "income_middle", segmentLabel: "中間層", axis: "income", applicability: "applicable", effectScore: 5, benefitLevel: "medium", riskLevel: "medium", summary: "制度内容が明確なら一定の便益を感じやすい。", reason: "政策対象が広い場合に影響を受けやすいため" },
+      { segmentId: "income_high", segmentLabel: "高所得層", axis: "income", applicability: "applicable", effectScore: 1, benefitLevel: "low", riskLevel: "low", summary: "直接的な生活改善効果は限定的。", reason: "所得に対する政策効果の比率が小さいため" },
+    ],
+  };
+}
+
+function nationalMetricIds() {
+  return [
+    "support",
+    "happiness",
+    "academic",
+    "fairness",
+    "rule",
+    "participation",
+    "externalReputation",
+    "externalAchievements",
+    "teacherSatisfaction",
+    "fiscalCapacity",
+    "socialSecurity",
+    "economicRipple",
+    "digitalUtilization",
+    "implementationRisk",
+    "regionalMobility",
+    "safetyTrust",
+    "importIndustryImpact",
+    "exportIndustryImpact",
+    "manufacturingImpact",
+    "agricultureImpact",
+    "financeIndustryImpact",
+  ];
+}
+
+function nationalGenerationContext(policyTarget) {
+  const policyDomain = inferPolicyDomain(policyTarget);
+  return {
+    scenario: appData.scenario,
+    policyTarget,
+    policyDirection: inferPolicyDirection(policyTarget),
+    policyDomain,
+    policyDomainGuidance: policyDomainGuidance(policyDomain),
+    metricAxisBindings: policyTargetMetricBindings(policyTarget),
+    requiredEffectAxes: requiredEffectAxesForPolicy(policyTarget),
+    baseMetrics: appData.metrics,
+    financeMetrics: appData.financeMetrics,
+    populationSegments: appData.populationSegments,
+    internationalRelations: appData.internationalRelations,
+    availableMetricIds: nationalMetricIds(),
+  };
+}
+
+function ensureNationalSegmentEffects(policyTarget, segmentEffects) {
+  if (segmentEffects && Object.keys(segmentEffects).length) return segmentEffects;
+  if (requiresAiFreeInference(policyTarget)) return {};
+  return sampleNationalSegmentEffects(policyTarget);
+}
+
+function nationalVoiceRules() {
+  return [
+    "日本を想定し、国民属性は人口構成に近い広がりを持たせる",
+    "政策文面を読んで、政策分野と政策方向を最初に判定する。context.policyDomainとcontext.policyDomainGuidanceを最優先で参照する",
+    "context.policyDomainがgeneral_policyの場合は未分類の自由記述として扱い、固定の税制・子育て・防衛・行政DX・交通テンプレートに落とさず、政策本文から分野・関連指標・効果軸・利害関係者を自由に推論する",
+    "政策分野に合わないテンプレートを使わない。生活費軽減、所得再分配、子育て支援、行政手続き負担などは、政策本文から直接関係が読める場合だけ中心論点にする",
+    "増税、社会保険料増、自己負担増、給付削減など生活者に見える負担増は、補償策が明記されない限り国民反応を否定・慎重に寄せる",
+    "負担増政策では、低所得層・中間層・子育て世帯・年金生活者などの短期効果を安易にプラスにしない",
+    "消費税増税など広く家計にかかる負担増で補償策がない場合、賛成・条件付き支持の合計は全体の35%以下、反対・慎重・不安の合計は55%以上を目安にする",
+    "財政改善や社会保障持続性へのプラスと、家計負担・消費・支持率へのマイナスを分けて評価する",
+    "防衛・安全保障政策では、抑止力、防衛産業、同盟・周辺国、財政負担、調達透明性、平和主義、倫理、安全管理、地域負担を扱う。格差対策や生活改善期待を主クラスターにしない",
+    "voicesは6件以上。世代、所得、地域、産業、政治思想、宗教・支持団体などを組み合わせたペルソナにする",
+    "政治思想は保守、リベラル、極右的保守、宗教層、急進左派、無関心層を単独カテゴリではなく属性の組み合わせとして扱う",
+    "各voiceのtextは、政策名を置換しただけの汎用文にせず、その政策で本人に何が起きるかを具体的に書く",
+    "政策が負担増の場合、生活改善期待という肯定クラスターを作らない。支持する場合も財政規律・将来世代・使途限定・還付条件などの条件付き支持にする",
+  ];
+}
+
+async function generateNationalVoicesWithAi(policyTarget) {
+  const prompt = JSON.stringify(
+    {
+      task: "国版政策シミュレーターの第一段階として、政策ターゲットに対する国民・ステークホルダーの代表的な声だけを生成してください。",
+      context: nationalGenerationContext(policyTarget),
+      requirements: nationalVoiceRules(),
+      outputNotes: [
+        "この段階ではvoiceAnalysisやpolicyDraftは作らない",
+        "policyTarget.designIssuesがある場合は、各争点の対立軸に対する賛否・条件・懸念が分かれるように声を作る",
+        "moodには反対、強い慎重、不安、条件付き支持、中立、低関心など態度が分かる語を使う",
+        "後続のクラスター分析ができるよう、賛否・利害・関心度が分散した声にする",
+      ],
+    },
+    null,
+    2,
+  );
+
+  return await withTimeout(
+    callProviderJson({ schemaName: "national-voices", prompt }),
+    AI_GENERATION_TIMEOUT_MS,
+    "声生成のAI応答が15分以内に返りませんでした",
+  );
+}
+
+async function generateNationalVoiceAnalysisWithAi(policyTarget, voices) {
+  const prompt = JSON.stringify(
+    {
+      task: "国版政策シミュレーターの第二段階として、入力された声だけを根拠にクラスター分析を作成してください。",
+      context: nationalGenerationContext(policyTarget),
+      voices,
+      requirements: [
+        "新しい声を捏造せず、representativeVoiceIdsは入力voicesのidだけを参照する",
+        "voiceAnalysis.clustersは4から6件",
+        "populationSizeは代表発話数ではなく、政策影響を受ける推定母集団とする。国全体に関わる政策では125000000程度を使う",
+        "sampledOpinionCountは代表発話数ではなく、背後にある推定アンケート母数とする。800から3000程度を使い、入力voices.lengthをそのまま入れない",
+        "clustersのsize合計はsampledOpinionCountと整合させる",
+        "負担増政策では、反対・慎重・不安クラスターが過半になるように、入力された声の態度を反映する",
+        "policyTarget.designIssuesがある場合は、争点ごとに近いクラスター・遠いクラスターが見えるようにsummaryとdistancesへ反映する",
+        "賛成・条件付き支持クラスターを過大評価しない。財政再建支持は条件付き支持として扱う",
+        "distancesは主要クラスター間の近さを3件以上返す",
+        "hierarchyは画面の階層表示に使えるよう、上位カテゴリと子クラスターを含める",
+      ],
+    },
+    null,
+    2,
+  );
+
+  return await withTimeout(
+    callProviderJson({ schemaName: "national-voice-analysis", prompt }),
+    AI_GENERATION_TIMEOUT_MS,
+    "クラスター分析のAI応答が15分以内に返りませんでした",
+  );
+}
+
+async function generateNationalInitialPolicyWithAi(policyTarget, voices, voiceAnalysis) {
+  const prompt = JSON.stringify(
+    {
+      task: "国版政策シミュレーターの第三段階として、声とクラスター分析を入力データにして初期政策案を作成してください。",
+      context: nationalGenerationContext(policyTarget),
+      voices,
+      voiceAnalysis,
+      requirements: [
+        "policyDraft.primaryIssueIdはpolicyTarget.idにする",
+        "policyDraftは短期実行を前提にする",
+        "負担増政策では、支持を広げるための補償策・時限措置・使途限定・低所得層還付などを実施内容に必ず含める",
+        "policyTarget.designIssuesがある場合は、各争点の対立軸から1つ以上の方針を選び、implementationDetails、concerns、costBreakdownのいずれかに明記する",
+        "costBreakdownは3件以上。何に対して、どう計算し、どの財源で賄うかをdetailsまで分解する",
+        "shortTermEffectsはavailableMetricIdsから該当する指標だけをキーにし、-12から+12程度の変化量にする",
+        "segmentEffectsには、context.requiredEffectAxesに含まれる効果軸を必ず返す",
+        "context.metricAxisBindingsは、policyTarget.relatedMetricIdsの各指標をどの効果軸に出すかの明示的な対応表である。各bindingのaxisに対応するsegmentEffects内で、そのmetricLabelに関係する影響をsummaryまたはreasonへ明記する",
+        "例: relatedMetricIdsにfiscalCapacityやsocialSecurityが含まれる場合、context.requiredEffectAxesにfiscalが入り、segmentEffects.fiscalを必ず生成する",
+        "policyTarget.metricsとpolicyTarget.relatedMetricIdsに含まれる指標は、segmentEffects、shortTermEffects、expectedEffects、concernsのどこかで必ず触れる",
+        "行政AI・自動運転など実装型政策では、implementationRisk、digitalUtilization、safetyTrustを落とさず評価する",
+        "出力前に自己レビューし、政策名から見て当然必要な効果軸や指標が抜けていないかを修正してから返す",
+        "増税・負担増政策では、少なくともincome, generation, industry, fiscal, implementationを返す",
+        "減税・給付・支援政策では、少なくともincome, generation, industry, fiscalを返す",
+        "segmentEffectsのeffectScoreは便益ならプラス、不利益ならマイナス、該当性が低い場合はnullにする",
+        "増税・負担増では所得別・世代別のeffectScoreを、補償策なしにプラスへしない",
+        "世代別・所得別・産業別・国際関係への影響が該当する場合は、segmentEffectsとexpectedEffectsまたはconcernsに明記する",
+        "長期影響は画面では非表示のため、longTermEffectsは空または控えめな仮置きにする",
+        "assistantMessageはユーザーに対し、どの分析ビューから確認すべきかを短く案内する",
+      ],
+    },
+    null,
+    2,
+  );
+
+  return await withTimeout(
+    callProviderJson({ schemaName: "national-initial-policy", prompt }),
+    AI_GENERATION_TIMEOUT_MS,
+    "初期政策案生成のAI応答が15分以内に返りませんでした",
+  );
+}
+
+async function generateNationalPolicyTargetData(policyTarget) {
+  if (usesFixedSampleProvider()) {
+    if (requiresAiFreeInference(policyTarget)) {
+      throw new Error("自由記述政策は固定サンプルでは生成できません。AI設定で接続先を有効にしてからリトライしてください。");
+    }
+    return null;
+  }
+  assertAiConnection();
+
+  try {
+    const voiceGeneration = await generateNationalVoicesWithAi(policyTarget);
+    const voices = voiceGeneration.voices || [];
+    const analysisGeneration = await generateNationalVoiceAnalysisWithAi(policyTarget, voices);
+    const voiceAnalysis = normalizeNationalVoiceAnalysis(analysisGeneration.voiceAnalysis, voices);
+    const policyGeneration = await generateNationalInitialPolicyWithAi(policyTarget, voices, voiceAnalysis);
+    if (requiresAiFreeInference(policyTarget) && (!voices.length || !voiceAnalysis?.clusters?.length || !policyGeneration.policyDraft)) {
+      throw new Error("自由記述政策のAI推論結果が不足しています。voices、voiceAnalysis、policyDraftをすべて返すようにリトライしてください。");
+    }
+    return {
+      voices,
+      voiceAnalysis,
+      policyDraft: policyGeneration.policyDraft,
+      segmentEffects: policyGeneration.segmentEffects || {},
+      assistantMessage: policyGeneration.assistantMessage || analysisGeneration.assistantMessage || voiceGeneration.assistantMessage || "",
+    };
+  } catch (error) {
+    console.warn(error);
+    setAiErrorNotice(error);
+    throw error;
+  }
 }
 
 function applyPreparedTargetMock(policyTarget) {
   const prepared = appData.targetMockData?.[policyTarget?.id];
   if (!prepared) return false;
   appData.voices = deepClone(prepared.voices || []);
-  appData.voiceAnalysis = deepClone(prepared.voiceAnalysis || null);
-  appData.segmentEffects = deepClone(prepared.segmentEffects || appData.segmentEffects || {});
+  appData.voiceAnalysis = normalizeNationalVoiceAnalysis(deepClone(prepared.voiceAnalysis || null), appData.voices);
+  appData.segmentEffects = deepClone(prepared.segmentEffects || {});
   applyPolicyDraft(deepClone(prepared.policy || emptyPolicyDraft()), { resetChat: true });
   if (prepared.policyChat?.messages?.length) {
     appData.policyChat = deepClone(prepared.policyChat);
@@ -2399,7 +3802,7 @@ function applyPreparedTargetMock(policyTarget) {
   return true;
 }
 
-function generatePolicyTargetInitialData() {
+async function generatePolicyTargetInitialData() {
   const policyTarget = selectedPolicyTarget();
   if (!policyTarget) {
     saveStatus = "政策ターゲットを選択してください";
@@ -2407,17 +3810,35 @@ function generatePolicyTargetInitialData() {
     return;
   }
   const usedPreparedMock = applyPreparedTargetMock(policyTarget);
+  let usedAiGeneration = false;
+  let assistantMessage = "";
   if (!usedPreparedMock) {
+    const generation = await generateNationalPolicyTargetData(policyTarget);
+    if (generation) {
+      appData.voices = generation.voices || [];
+      appData.voiceAnalysis = normalizeNationalVoiceAnalysis(generation.voiceAnalysis || null, appData.voices);
+      appData.segmentEffects = ensureNationalSegmentEffects(policyTarget, generation.segmentEffects);
+      applyPolicyDraft(generation.policyDraft || sampleNationalPolicyDraft(policyTarget), { resetChat: true });
+      assistantMessage = generation.assistantMessage || "";
+      usedAiGeneration = true;
+    }
+  }
+  if (!usedPreparedMock && !usedAiGeneration) {
+    if (requiresAiFreeInference(policyTarget)) {
+      throw new Error("自由記述政策は固定サンプルを使わず、AI接続で生成してください。");
+    }
     appData.voices = sampleNationalVoices(policyTarget);
-    appData.voiceAnalysis = sampleNationalVoiceAnalysis(policyTarget, appData.voices);
+    appData.voiceAnalysis = normalizeNationalVoiceAnalysis(sampleNationalVoiceAnalysis(policyTarget, appData.voices), appData.voices);
+    appData.segmentEffects = sampleNationalSegmentEffects(policyTarget);
     applyPolicyDraft(sampleNationalPolicyDraft(policyTarget), { resetChat: true });
   }
+  const sourceLabel = usedPreparedMock ? "用意済みモックデータ" : usedAiGeneration ? "AI生成データ" : "固定サンプルデータ";
   appData.issueSelectionChat.messages.push({
     role: "assistant",
-    text: `「${policyTarget.title}」について${usedPreparedMock ? "用意済みモックデータ" : "仮想の国民・ステークホルダーの声と初期政策案"}を生成しました。声の分析画面でクラスターを確認できます。`,
+    text: assistantMessage || `「${policyTarget.title}」について${sourceLabel}で国民・ステークホルダーの声と初期政策案を生成しました。声の分析画面でクラスターを確認できます。`,
   });
-  saveStatus = usedPreparedMock ? "用意済みモックデータで声の分析と初期政策案を生成しました" : "声の分析と初期政策案を生成しました";
-  activeView = "voices";
+  saveStatus = `${sourceLabel}で声の分析と初期政策案を生成しました`;
+  nationalGenerationNotice = `「${policyTarget.title}」の声の分析と初期政策案の生成が完了しました。左メニューの「声の分析」または「政策案」から確認できます。`;
   App(appData);
 }
 
@@ -2490,7 +3911,8 @@ function dashboardMetricsFor(view) {
     international: ["international"],
     industry: ["industry", "economy"],
     implementation: ["implementation"],
-    digital_access: ["implementation"],
+    digital_access: ["digital"],
+    regional: ["regional"],
   };
   if (view === "all") return appData.metrics;
   if (view === "related") {
@@ -2770,7 +4192,7 @@ function NationalResultReport() {
             <span class="section-label">実行結果レポート</span>
             <h2>${appData.policy.title}</h2>
           </div>
-          <small>単発実行 / 詳細版</small>
+          <small>政策実行 / 詳細版</small>
         </div>
         <div class="report-summary-grid">
           <div>
@@ -3238,9 +4660,31 @@ function VoiceRepresentatives() {
   `;
 }
 
+function VoiceRepresentativeSampleLabel() {
+  const representativeCount = appData.voices?.length || 0;
+  const sampleCount = appData.voiceAnalysis?.sampledOpinionCount;
+  if (isNationalScenario() && sampleCount) {
+    return `推定アンケート${formatCount(sampleCount)}件から${formatCount(representativeCount)}件を代表例`;
+  }
+  return `${formatCount(sampleCount || representativeCount)}件から代表例`;
+}
+
 function VoiceAnalysisViewer() {
   const analysis = appData.voiceAnalysis;
   if (!analysis) return `<div class="voice-list">${appData.voices.map(VoiceCard).join("")}</div>`;
+  const representativeVoiceCount = appData.voices?.length || 0;
+  const summaryItems = isNationalScenario()
+    ? [
+        [analysis.populationSize, "推定母集団"],
+        [analysis.sampledOpinionCount, "推定アンケート母数"],
+        [representativeVoiceCount, "代表発話"],
+        [analysis.clusters.length, "意見クラスター"],
+      ]
+    : [
+        [analysis.populationSize, "想定生徒数"],
+        [analysis.sampledOpinionCount, "分析対象の声"],
+        [analysis.clusters.length, "意見クラスター"],
+      ];
   const tabs = [
     ["map", "距離マップ"],
     ["hierarchy", "階層"],
@@ -3254,9 +4698,7 @@ function VoiceAnalysisViewer() {
   return `
     <div class="voice-analysis">
       <div class="analysis-summary">
-        <div><strong>${analysis.populationSize}</strong><span>${isNationalScenario() ? "想定人口" : "想定生徒数"}</span></div>
-        <div><strong>${analysis.sampledOpinionCount}</strong><span>分析対象の声</span></div>
-        <div><strong>${analysis.clusters.length}</strong><span>意見クラスター</span></div>
+        ${summaryItems.map(([value, label]) => `<div><strong>${formatCount(value)}</strong><span>${label}</span></div>`).join("")}
       </div>
       <div class="chart-tabs" role="tablist" aria-label="声の分析表示切替">
         ${tabs.map(([id, label]) => `<button class="${activeVoiceChart === id ? "active" : ""}" type="button" data-voice-chart="${id}">${label}</button>`).join("")}
@@ -3302,15 +4744,89 @@ function IssueList() {
   return appData.issues
     .map((issue) => {
       const isSelected = issue.id === appData.issueSelectionChat.selectedIssueId;
+      const target = (appData.policyTargets || []).find((candidate) => candidate.id === issue.id) || issue;
+      const issueCount = designIssuesForPolicy(target).length;
       return `
       <button class="issue-row ${isSelected ? "selected" : ""}" type="button" data-issue-id="${issue.id}" aria-pressed="${isSelected}">
         <span>${issue.title}</span>
-        <strong>${formatIssueFit(issue)}%</strong>
+        <strong class="issue-fit"><small>分析適合度</small>${formatIssueFit(issue)}%</strong>
         <small>${issue.metrics.join(" / ")}</small>
+        ${issueCount ? `<em>制度設計上の争点 ${issueCount}件</em>` : ""}
       </button>
     `;
     })
     .join("");
+}
+
+function PolicyDesignIssueList(policyTarget = selectedPolicyTarget()) {
+  const designIssues = designIssuesForPolicy(policyTarget);
+  if (!designIssues.length) {
+    return `
+      <section class="design-issues-panel empty">
+        <h3>制度設計上の争点</h3>
+        <p>政策ターゲットを選択すると、チャットで独自色を入れやすくするための対立軸を表示します。</p>
+      </section>
+    `;
+  }
+  return `
+    <section class="design-issues-panel">
+      <div class="panel-head">
+        <h3>制度設計上の争点</h3>
+        <span>${designIssues.length}件</span>
+      </div>
+      <div class="design-issue-list">
+        ${designIssues
+          .map(
+            (issue) => `
+              <article class="design-issue-card">
+                <header>
+                  <strong>${escapeHtml(issue.title)}</strong>
+                  <small>${escapeHtml(issue.id)}</small>
+                </header>
+                <div class="design-axis">
+                  <span>${escapeHtml(issue.axisA)}</span>
+                  <b>vs</b>
+                  <span>${escapeHtml(issue.axisB)}</span>
+                </div>
+                <p>${escapeHtml(issue.description)}</p>
+                <ul>
+                  ${(issue.watchPoints || []).map((point) => `<li>${escapeHtml(point)}</li>`).join("")}
+                </ul>
+              </article>
+            `,
+          )
+          .join("")}
+      </div>
+      <p class="panel-note">この対立軸をチャットで指定すると、対象範囲、補償策、規制の強さ、財源方針などに独自色を入れやすくなります。</p>
+    </section>
+  `;
+}
+
+function PolicyMetricAxisBindingList(policyTarget = selectedPolicyTarget()) {
+  const bindings = policyTargetMetricBindings(policyTarget);
+  if (!bindings.length) return "";
+  return `
+    <section class="metric-axis-panel">
+      <div class="panel-head">
+        <h3>関連指標と効果軸</h3>
+        <span>${requiredEffectAxesForPolicy(policyTarget).map(effectAxisTitle).join(" / ")}</span>
+      </div>
+      <div class="metric-axis-grid">
+        ${bindings
+          .map(
+            (binding) => `
+              <div>
+                <strong>${escapeHtml(binding.metricLabel)}</strong>
+                <span>${escapeHtml(binding.axisLabel)}</span>
+                ${binding.description ? `<small>${escapeHtml(binding.description)}</small>` : ""}
+              </div>
+            `,
+          )
+          .join("")}
+      </div>
+      <p class="panel-note">声の分析と政策案生成では、この対応表に基づいて効果軸を出します。</p>
+    </section>
+  `;
 }
 
 function FreePolicyTargetForm() {
@@ -3426,7 +4942,7 @@ function PolicyPreview() {
       <div>
         <span class="section-label">${isNationalScenario() ? "政策案" : "今学期の施策案"}</span>
         <h3>${policy.title}</h3>
-        <p>${policy.summary || `${policy.covers.join("、")}に同時対応する単一施策。${policy.financePlan}。`}</p>
+        <p>${policy.summary || `${policy.covers.join("、")}に同時対応する${isNationalScenario() ? "政策案" : "単一施策"}。${policy.financePlan}。`}</p>
       </div>
       <div class="budget-ring" style="--value:${budgetAngle}deg">
         <strong>${policy.budget}</strong>
@@ -3632,17 +5148,17 @@ function PolicyRevisionChat() {
     <article class="panel issue-chat-panel policy-chat-panel">
       <div class="panel-header">
         <div>
-          <span class="section-label">施策修正チャット</span>
+          <span class="section-label">${isNationalScenario() ? "政策案修正チャット" : "施策修正チャット"}</span>
           <h2>${isNationalScenario() ? "政策案を深掘りして調整" : "施策案を深掘りして調整"}</h2>
         </div>
-        <small>${hasDraft ? "編集中" : "施策案未作成"}</small>
+        <small>${hasDraft ? "編集中" : isNationalScenario() ? "政策案未作成" : "施策案未作成"}</small>
       </div>
       <div class="chat-thread">
         ${chat.messages
           .map(
             (message) => `
             <div class="chat-message ${message.role}">
-              <span>${message.role === "user" ? "生徒会" : "AI"}</span>
+              <span>${message.role === "user" ? (isNationalScenario() ? "ユーザー" : "生徒会") : "AI"}</span>
               <p>${message.text}</p>
             </div>
           `,
@@ -3663,7 +5179,7 @@ function TurnResultPreview() {
     return `
       <div class="turn-result-preview empty">
         <span>実行結果</span>
-        <p>${isNationalScenario() ? "政策実行後、短期結果・長期予想・クラスター別影響を表示します。" : "施策実行後、AIシミュレーション結果を指標・財務・属性メモリーへ反映します。"}</p>
+        <p>${isNationalScenario() ? "政策実行後、短期結果とクラスター別影響を表示します。" : "施策実行後、AIシミュレーション結果を指標・財務・属性メモリーへ反映します。"}</p>
       </div>
     `;
   }
@@ -3678,7 +5194,7 @@ function TurnResultPreview() {
         <b>cash ${result.financeDelta.cash > 0 ? "+" : ""}${result.financeDelta.cash}</b>
       </div>
       <small>${result.randomEvents.join(" / ")}</small>
-      ${isNationalScenario() ? `<span class="turn-end-label">単発実行は完了しました</span>` : currentTurn().term >= 3 ? `<span class="turn-end-label">年度末処理へ進めます</span>` : `<button id="advance-turn" type="button">次学期へ進む</button>`}
+      ${isNationalScenario() ? `<span class="turn-end-label">政策実行は完了しました</span>` : currentTurn().term >= 3 ? `<span class="turn-end-label">年度末処理へ進めます</span>` : `<button id="advance-turn" type="button">次学期へ進む</button>`}
     </div>
   `;
 }
@@ -3811,7 +5327,7 @@ function VoicesView() {
               <span class="section-label">声の分析</span>
               <h2>国民・ステークホルダーの反応</h2>
             </div>
-            <small>${appData.voiceAnalysis?.sampledOpinionCount || appData.voices.length}件から代表例</small>
+            <small>${VoiceRepresentativeSampleLabel()}</small>
           </div>
           ${VoiceAnalysisViewer()}
         </article>
@@ -3842,7 +5358,7 @@ function VoicesView() {
             <span class="section-label">収集した声の分析</span>
             <h2>代表発話と意見空間</h2>
           </div>
-          <small>${appData.voiceAnalysis?.sampledOpinionCount || appData.voices.length}件から代表例</small>
+          <small>${VoiceRepresentativeSampleLabel()}</small>
         </div>
         ${VoiceAnalysisViewer()}
       </article>
@@ -3886,9 +5402,11 @@ function IssuesView() {
             <p>${policyTarget?.summary || ""}</p>
             <div class="policy-target-meta">
               <div><strong>関連指標</strong><span>${(policyTarget?.metrics || []).join(" / ")}</span></div>
-              <div><strong>推奨ビュー</strong><span>${(policyTarget?.recommendedViews || []).join(" / ")}</span></div>
+              <div><strong>生成対象の効果軸</strong><span>${requiredEffectAxesForPolicy(policyTarget).map(effectAxisTitle).join(" / ") || "関連指標から生成"}</span></div>
               <div><strong>財源上の注意</strong><span>${policyTarget?.fundingNote || "政策案生成時に確認"}</span></div>
             </div>
+            ${PolicyMetricAxisBindingList(policyTarget)}
+            ${PolicyDesignIssueList(policyTarget)}
             ${IssueSelectionChat()}
           </article>
         </div>
@@ -3947,7 +5465,7 @@ function ResultView() {
         <div class="section-head">
           <div>
             <h2>実行結果</h2>
-            <p>単発政策の短期結果と属性別影響を、年度レポート形式で詳しく確認します。</p>
+            <p>政策の短期結果と属性別影響を、政策レポート形式で詳しく確認します。</p>
           </div>
           <span class="status-pill">詳細レポート</span>
         </div>
@@ -3981,9 +5499,185 @@ function ResultView() {
   `;
 }
 
+function ProcessGuideView() {
+  const guideSteps = [
+    {
+      view: "dashboard",
+      image: "dashboard.png",
+      title: "ダッシュボード",
+      action: "初期状態を確認",
+      description: [
+        "政策を決める前に、日本の初期状態とシミュレーションの前提を確認します。",
+        "主要指標、政策関連指標、人口構成、国際関係スコアを見ながら、どの分野に注意して政策を検討するかを把握します。",
+        "確認後、画面右上の「政策ターゲットへ進む」または左メニューから次の画面へ進みます。",
+      ],
+    },
+    {
+      view: "issues",
+      image: "policy-target.png",
+      title: "政策ターゲット",
+      action: "分析対象の政策を指定",
+      description: [
+        "プリセット政策を選ぶか、自由記述で検討したい政策を入力します。",
+        "選択した政策の内容を画面右の詳細欄で確認し、必要に応じてAIに質問して確認します。",
+        "確認後「声の分析へ進む」を選択します。",
+      ],
+    },
+    {
+      view: "voices",
+      image: "voices.png",
+      title: "声の分析",
+      action: "国民・ステークホルダー反応を確認",
+      description: [
+        "政策ターゲットに対して生成された国民・ステークホルダーの反応を確認します。",
+        "距離マップ、階層、代表発話を切り替えながら、賛否、利害、無関心層、実務負担の分布を見ます。",
+        "所得別、世代別、産業別などの効果軸も確認し、どの層に影響が出やすいかを把握して政策案へ進みます。",
+      ],
+    },
+    {
+      view: "policy",
+      image: "policy-draft.png",
+      title: "政策案",
+      action: "実施内容・コストを調整",
+      description: [
+        "生成された初期政策案を、コスト、実施内容、効果、対象属性に分けて確認します。",
+        "必要に応じてチャットで条件、補償策、税率、対象範囲を修正し、政策本文だけでなく実施内容やコスト内訳にも反映されているか確認します。",
+        "内容に問題がなければ、画面右上の「政策を実行して結果を見る」を選択します。",
+      ],
+    },
+    {
+      view: "result",
+      image: "result-report.png",
+      title: "実行結果",
+      action: "政策実行レポートを確認",
+      description: [
+        "政策実行後の結果を、詳細レポート形式で確認します。",
+        "全体のまとめ、影響が大きい分野、主要指標の変化、属性別の反応を読み、政策の短期的な効果と副作用を確認します。",
+        "必要に応じて保存画面からJSON保存やHTMLレポート出力を行い、検討内容を残します。",
+      ],
+    },
+  ];
+  const modes = [
+    ["固定サンプル", "事前モックで動作確認"],
+    ["AI生成", "接続Providerで声・分析・政策案を生成"],
+  ];
+  const thumb = (step) => `
+    <figure class="screen-thumb-frame">
+      <img src="./assets/screenshots/${step.image}" alt="${step.title}画面のスクリーンショット" onload="this.dataset.loaded = 'true'" onerror="this.hidden = true" />
+      <div class="screen-thumb ${step.view}" aria-hidden="true">
+      <div class="thumb-top">
+        <i></i><i></i><i></i>
+      </div>
+      <div class="thumb-body">
+        ${
+          step.view === "dashboard"
+            ? `
+              <div class="thumb-metrics"><b></b><b></b><b></b><b></b></div>
+              <div class="thumb-wide"><span></span><span></span><span></span></div>
+              <div class="thumb-side"><span></span><span></span><span></span></div>
+            `
+            : ""
+        }
+        ${
+          step.view === "issues"
+            ? `
+              <div class="thumb-list"><b></b><b></b><b></b></div>
+              <div class="thumb-chat"><span></span><span></span></div>
+            `
+            : ""
+        }
+        ${
+          step.view === "voices"
+            ? `
+              <div class="thumb-map"><b></b><b></b><b></b><b></b></div>
+              <div class="thumb-tabs"><span></span><span></span><span></span></div>
+            `
+            : ""
+        }
+        ${
+          step.view === "policy"
+            ? `
+              <div class="thumb-donut"></div>
+              <div class="thumb-tabs"><span></span><span></span><span></span></div>
+              <div class="thumb-list compact"><b></b><b></b></div>
+            `
+            : ""
+        }
+        ${
+          step.view === "result"
+            ? `
+              <div class="thumb-report"><b></b><span></span><span></span><span></span></div>
+              <div class="thumb-chart"><i></i><i></i><i></i></div>
+            `
+            : ""
+        }
+      </div>
+    </div>
+    </figure>
+  `;
+  return `
+    <section class="process-guide-view">
+      <div class="section-head">
+        <div>
+          <h2>使い方</h2>
+          <p>各画面を順番に進みながら、人が判断する作業とAIが生成・分析する内容を確認します。</p>
+        </div>
+      </div>
+
+      <div class="process-mode-strip">
+        ${modes.map(([title, body]) => `<article><strong>${title}</strong><p>${body}</p></article>`).join("")}
+      </div>
+
+      <div class="screen-tour" aria-label="画面サムネイル付きの使い方">
+        ${guideSteps
+          .map(
+            (step, index) => `
+              <article class="tour-step">
+                <div class="tour-number">
+                  <span>${index + 1}</span>
+                </div>
+                <div class="tour-shot">
+                  ${thumb(step)}
+                </div>
+                <div class="tour-copy">
+                  <span class="section-label">${step.title}</span>
+                  <h3>${step.action}</h3>
+                  <div class="tour-description">
+                    ${step.description.map((text) => `<p>${text}</p>`).join("")}
+                  </div>
+                </div>
+              </article>
+            `,
+          )
+          .join("")}
+      </div>
+
+      <article class="panel process-contract-panel">
+        <div class="panel-head">
+          <h3>現在の生成パイプライン</h3>
+          <span>政策ターゲット決定後</span>
+        </div>
+        <div class="process-pipeline">
+          <span>政策ターゲット</span>
+          <i></i>
+          <span>声の作成</span>
+          <i></i>
+          <span>クラスター分析</span>
+          <i></i>
+          <span>初期政策案</span>
+          <i></i>
+          <span>政策実行結果</span>
+        </div>
+        <p>各段階はJSON Schemaで受け取り、画面表示・保存・HTMLレポート出力に同じ状態データを使います。</p>
+      </article>
+    </section>
+  `;
+}
+
 function ActiveView() {
   const views = {
     dashboard: DashboardView,
+    guide: ProcessGuideView,
     voices: VoicesView,
     issues: IssuesView,
     policy: PolicyView,
@@ -4148,16 +5842,17 @@ function NationalNavLink(view, label) {
 
 function App(data) {
   appData = data;
+  normalizeNationalGeneratedState();
   const turn = currentTurn();
   const national = isNationalScenario();
   const statusTitle = appData.scenario.selectedPolicyTitle || appData.policy?.title || "政策未選択";
   document.querySelector("#app").innerHTML = `
-    <div class="app-shell ${national ? "national-shell" : ""}">
+    <div class="app-shell ${national ? "national-shell" : ""} view-${activeView}">
       <aside class="sidebar">
         <div class="brand">
           <span class="brand-mark">${national ? "政" : "学"}</span>
           <div class="brand-copy">
-            <strong>${national ? "政策シミュレーター" : "School Democracy Lab"}</strong>
+            <strong>${national ? "仮想政策シミュレーター" : "School Democracy Lab"}</strong>
             ${national ? "<small>Japan Policy Lab</small>" : ""}
           </div>
         </div>
@@ -4186,6 +5881,7 @@ function App(data) {
             ? `
               <div class="sidebar-actions">
                 <a id="save-settings" href="#">保存</a>
+                <button id="process-guide-open" type="button" class="${activeView === "guide" ? "active" : ""}">使い方</button>
                 <button id="ai-settings" type="button">AI設定</button>
               </div>
             `
@@ -4198,11 +5894,16 @@ function App(data) {
           <div>
             ${
               national
-                ? `<p class="screen-kicker">MVP screen mock</p>`
+                ? ""
                 : `<div class="term-badge"><span>現在</span><strong>${turn.year}年目 ${termLabel(turn)}</strong></div>`
             }
-            <h1>${appData.scenario.title || (national ? "国版 政策シミュレーター" : "学園自治シミュレーター")}</h1>
-            <p>${national ? "対象政策に応じて、関連指標・国民の声・効果軸を切り替えながら単発政策の影響を確認します。" : `${appData.scenario.termLabel}開始時点の指標から、生徒の声と課題候補をAIで抽出します。`}</p>
+            <h1>${appData.scenario.title || (national ? "日本版　仮想政策シミュレーター" : "学園自治シミュレーター")}</h1>
+            <p>${national ? "対象政策に応じて、関連指標・国民の声・効果軸を切り替えながら政策の影響をAIを使って予想します。" : `${appData.scenario.termLabel}開始時点の指標から、生徒の声と課題候補をAIで抽出します。`}</p>
+            ${
+              national
+                ? `<p class="simulation-disclaimer">本アプリケーションは、AIが推測したデータから導いた推測結果であり、実データに基づいてシミュレーションした結果ではありません。</p>`
+                : ""
+            }
           </div>
           ${
             national
@@ -4230,10 +5931,12 @@ function App(data) {
           AI: ${aiStatusText()}。${national ? "まずは固定モックデータで動作確認し、後続で実AI接続へ切り替えます。" : "公開Webでは利用者のAPIキー、ローカルではCodex App Serverも選べます。"}
           ${aiNotice ? `<div class="ai-warning">${aiNotice}</div>` : ""}
         </div>
+        ${national && (isNationalGenerating || nationalGenerationNotice) ? `<div class="generation-notice ${isNationalGenerating ? "running" : ""}">${isNationalGenerating ? "声の分析と初期政策案を生成中です。画面を移動しても処理は継続します。" : nationalGenerationNotice}</div>` : ""}
         ${ActiveView()}
       </main>
       ${AiSettingsModal()}
       ${SaveModal()}
+      ${AiErrorModal()}
     </div>
   `;
   bindInteractions();
@@ -4283,6 +5986,28 @@ function AiSettingsModal() {
   `;
 }
 
+function AiErrorModal() {
+  if (!aiErrorDialog) return "";
+  return `
+    <div id="ai-error-modal" class="modal-backdrop">
+      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="ai-error-title">
+        <div class="panel-header">
+          <div>
+            <span class="section-label">AI接続</span>
+            <h2 id="ai-error-title">${escapeHtml(aiErrorDialog.title)}</h2>
+          </div>
+        </div>
+        <p>${escapeHtml(aiErrorDialog.message)}</p>
+        <div class="ai-warning">${escapeHtml(aiErrorDialog.detail)}</div>
+        <div class="modal-actions">
+          <button id="ai-error-cancel" type="button">キャンセル</button>
+          <button id="ai-error-retry" class="primary" type="button">リトライ</button>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
 function SaveModal() {
   const memory = appData.memory;
   const timelineCount = memory?.timeline?.length || 1;
@@ -4308,6 +6033,7 @@ function SaveModal() {
         <div class="save-actions">
           <button id="cache-save" class="primary" type="button">ブラウザに保存</button>
           <button id="cache-load" type="button">ブラウザから読込</button>
+          <button id="export-report-html" type="button">HTMLレポート出力</button>
           <button id="export-save" type="button">JSONエクスポート</button>
           <button id="import-save" type="button">JSONインポート</button>
           <button id="cache-clear" class="danger" type="button">ブラウザ保存を削除</button>
@@ -4319,6 +6045,23 @@ function SaveModal() {
 }
 
 function bindInteractions() {
+  document.querySelector("#ai-error-retry")?.addEventListener("click", async () => {
+    const retry = aiErrorDialog?.retry;
+    clearAiErrorDialog();
+    App(appData);
+    try {
+      await retry?.();
+    } catch (error) {
+      console.warn(error);
+      showAiErrorDialog({ error, retry });
+    }
+  });
+  document.querySelector("#ai-error-cancel")?.addEventListener("click", () => {
+    const cancel = aiErrorDialog?.cancel;
+    clearAiErrorDialog();
+    App(appData);
+    cancel?.();
+  });
   document.querySelectorAll("nav a[data-view]").forEach((link) => {
     link.addEventListener("click", (event) => {
       event.preventDefault();
@@ -4400,8 +6143,39 @@ function bindInteractions() {
     upsertFreePolicyTarget(buildFreePolicyTarget(text));
     App(appData);
   });
-  document.querySelector("#generate-target-analysis")?.addEventListener("click", () => {
-    generatePolicyTargetInitialData();
+  document.querySelector("#generate-target-analysis")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    button.textContent = "声と政策案を生成中";
+    isNationalGenerating = true;
+    nationalGenerationNotice = "";
+    saveStatus = "声の分析と初期政策案を生成中です";
+    App(appData);
+    try {
+      await generatePolicyTargetInitialData();
+    } catch (error) {
+      console.warn(error);
+      nationalGenerationNotice = "";
+      showAiErrorDialog({
+        title: "声の分析生成エラー",
+        error,
+        retry: async () => {
+          isNationalGenerating = true;
+          nationalGenerationNotice = "";
+          saveStatus = "声の分析と初期政策案を生成中です";
+          App(appData);
+          try {
+            await generatePolicyTargetInitialData();
+          } finally {
+            isNationalGenerating = false;
+            App(appData);
+          }
+        },
+      });
+    } finally {
+      isNationalGenerating = false;
+      App(appData);
+    }
   });
   document.querySelectorAll("[data-jump-view]").forEach((button) => {
     button.addEventListener("click", (event) => {
@@ -4412,6 +6186,11 @@ function bindInteractions() {
   document.querySelector("#save-settings")?.addEventListener("click", (event) => {
     event.preventDefault();
     document.querySelector("#save-modal").hidden = false;
+  });
+
+  document.querySelector("#process-guide-open")?.addEventListener("click", () => {
+    activeView = "guide";
+    App(appData);
   });
   document.querySelector("#save-close")?.addEventListener("click", () => {
     document.querySelector("#save-modal").hidden = true;
@@ -4442,6 +6221,7 @@ function bindInteractions() {
     }
   });
   document.querySelector("#export-save")?.addEventListener("click", exportSaveFile);
+  document.querySelector("#export-report-html")?.addEventListener("click", exportReportHtml);
   document.querySelector("#import-save")?.addEventListener("click", () => {
     document.querySelector("#import-save-file")?.click();
   });
@@ -4462,19 +6242,25 @@ function bindInteractions() {
     try {
       await executePolicyTurn();
     } catch (error) {
-      saveStatus = `施策実行失敗: ${error.message}`;
-      App(appData);
+      showAiErrorDialog({
+        title: "政策実行シミュレーションエラー",
+        error,
+        retry: () => executePolicyTurn(),
+      });
     }
   });
   document.querySelector("#create-policy-draft")?.addEventListener("click", async (event) => {
     const button = event.currentTarget;
     button.disabled = true;
-    button.textContent = "施策案を生成中";
+    button.textContent = `${isNationalScenario() ? "政策案" : "施策案"}を生成中`;
     try {
       await createPolicyDraftFromSelection();
     } catch (error) {
-      saveStatus = `施策案生成失敗: ${error.message}`;
-      App(appData);
+      showAiErrorDialog({
+        title: "政策案生成エラー",
+        error,
+        retry: () => createPolicyDraftFromSelection(),
+      });
     }
   });
   document.querySelector("#policy-chat-send")?.addEventListener("click", async () => {
@@ -4486,13 +6272,17 @@ function bindInteractions() {
     sendButton.disabled = true;
     sendButton.textContent = "修正中";
     policyChat().messages.push({ role: "user", text });
-    const loadingMessageIndex = policyChat().messages.push({ role: "assistant", text: "施策案の実施内容、効果、懸念、属性別影響を見直しています。" }) - 1;
+    const loadingMessageIndex = policyChat().messages.push({ role: "assistant", text: `${isNationalScenario() ? "政策案" : "施策案"}の実施内容、効果、懸念、属性別影響を見直しています。` }) - 1;
     App(appData);
     try {
       await revisePolicyDraftFromChat(text);
     } catch (error) {
-      policyChat().messages[loadingMessageIndex] = { role: "assistant", text: `施策案の修正に失敗しました。${error.message}` };
-      App(appData);
+      policyChat().messages[loadingMessageIndex] = { role: "assistant", text: `${isNationalScenario() ? "政策案" : "施策案"}の修正に失敗しました。${error.message}` };
+      showAiErrorDialog({
+        title: "政策案修正エラー",
+        error,
+        retry: () => revisePolicyDraftFromChat(text),
+      });
     }
   });
   document.querySelector("#advance-turn")?.addEventListener("click", async (event) => {
@@ -4502,8 +6292,11 @@ function bindInteractions() {
     try {
       await advanceToNextTurn();
     } catch (error) {
-      saveStatus = `次学期生成失敗: ${error.message}`;
-      App(appData);
+      showAiErrorDialog({
+        title: "次学期生成エラー",
+        error,
+        retry: () => advanceToNextTurn(),
+      });
     }
   });
   document.querySelectorAll(".create-annual-report").forEach((button) => {
@@ -4587,6 +6380,16 @@ function bindInteractions() {
         clearNationalGeneratedOutputs();
       }
       resetPolicyDrivenViews(selectedPolicyTarget());
+    } catch (error) {
+      showAiErrorDialog({
+        title: "政策分析チャットエラー",
+        error,
+        retry: () => discussIssueSelection(text).then((result) => {
+          appData.issueSelectionChat.messages.push({ role: "assistant", text: result.message });
+          App(appData);
+        }),
+      });
+      return;
     } finally {
       App(appData);
     }
@@ -4603,7 +6406,7 @@ function bindInteractions() {
         clearNationalGeneratedOutputs();
       }
       resetPolicyDrivenViews((appData.policyTargets || []).find((target) => target.id === issue.id) || issue);
-      appData.issueSelectionChat.messages.push({ role: "user", text: `課題「${issue.title}」を選択しました。内容を詳しく説明してください。` });
+      appData.issueSelectionChat.messages.push({ role: "user", text: `${isNationalScenario() ? "政策ターゲット" : "課題"}「${issue.title}」を選択しました。内容を詳しく説明してください。` });
       const loadingMessageIndex = appData.issueSelectionChat.messages.push({ role: "assistant", text: `「${issue.title}」の背景と関連指標を分析しています。` }) - 1;
       App(appData);
       try {
@@ -4615,6 +6418,17 @@ function bindInteractions() {
           clearNationalGeneratedOutputs();
         }
         resetPolicyDrivenViews(selectedPolicyTarget());
+      } catch (error) {
+        appData.issueSelectionChat.messages[loadingMessageIndex] = { role: "assistant", text: `AI接続に失敗したため詳細説明を生成できませんでした。${error.message}` };
+        showAiErrorDialog({
+          title: "政策ターゲット説明エラー",
+          error,
+          retry: () => explainIssueSelection(issue).then((result) => {
+            appData.issueSelectionChat.messages[loadingMessageIndex] = { role: "assistant", text: result.message };
+            App(appData);
+          }),
+        });
+        return;
       } finally {
         App(appData);
       }

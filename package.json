@@ -8,6 +8,10 @@
     "dev": "python3 -m http.server 4173",
     "codex:app-server": "codex app-server --listen ws://127.0.0.1:45123",
     "codex:ai-bridge": "node tools/codex-ai-bridge.mjs",
-    "check": "node --check src/app.js"
+    "check": "node --check src/app.js",
+    "screenshots": "node tools/capture-screenshots.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.60.0"
   }
 }
