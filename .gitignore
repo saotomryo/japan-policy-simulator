@@ -8,10 +8,13 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# Local secrets and deployment metadata
 .env
 .env.*
 !.env.example
+.vercel/
 
+# Python/cache artifacts
 __pycache__/
 *.py[cod]
 *.pyo
@@ -27,5 +30,25 @@ env/
 dist/
 build/
 coverage/
+.cache/
+.vite/
+.parcel-cache/
 
+# Test and browser automation artifacts
+test-results/
+playwright-report/
+blob-report/
 *.log
+.playwright-mcp/
+
+# Local app exports and ad-hoc reports
+national-policy-simulator-*.json
+national-policy-report-*.html
+national-policy-*.html
+school-simulator-*.json
+school-simulator-report-*.html
+
+# Temporary local work files
+tmp/
+temp/
+*.tmp

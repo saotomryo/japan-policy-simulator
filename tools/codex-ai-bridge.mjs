@@ -77,7 +77,7 @@ function normalizeSchemaForCodex(value) {
 function codexRequest({ schemaName, prompt, schema, model }) {
   const codexSchema = normalizeSchemaForCodex(schema);
   const jsonPrompt = [
-    "あなたは学園自治シミュレーターの熟議支援AIです。",
+    "あなたは日本版仮想政策シミュレーターの熟議支援AIです。",
     "次の入力を読み、指定されたJSON Schemaに従うJSONだけを返してください。",
     "Markdown、説明文、コードフェンスは不要です。",
     "",
@@ -151,7 +151,7 @@ function codexRequest({ schemaName, prompt, schema, model }) {
     socket.addEventListener("open", async () => {
       try {
         await request("initialize", {
-          clientInfo: { name: "school-democracy-simulator", version: "0.1.0" },
+          clientInfo: { name: "national-policy-simulator", version: "0.1.0" },
           capabilities: { experimentalApi: true },
         });
         const threadStart = await request("thread/start", {
