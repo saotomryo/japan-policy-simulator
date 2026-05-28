@@ -58,6 +58,25 @@ http://127.0.0.1:4173/
 
 `file://` で直接 `index.html` を開くと、JSONデータやスキーマの読み込みがブラウザ制約で失敗することがあります。必ずHTTPサーバー経由で起動してください。
 
+## GitHub Pages
+
+`main` ブランチへpushすると、GitHub Actionsで静的ファイルを `_site` にまとめてGitHub Pagesへデプロイします。
+
+初回のみ、GitHubのリポジトリ設定で `Settings` -> `Pages` -> `Build and deployment` のSourceを `GitHub Actions` にしてください。
+
+ローカルでPages用の成果物を確認する場合は次を実行します。
+
+```bash
+npm run build:pages
+python3 -m http.server 4174 -d _site
+```
+
+ブラウザで次を開きます。
+
+```text
+http://127.0.0.1:4174/
+```
+
 ## AI設定
 
 画面右上の `AI設定` からProviderを選ぶ想定です。

@@ -30,6 +30,7 @@ env/
 dist/
 build/
 coverage/
+_site/
 .cache/
 .vite/
 .parcel-cache/
