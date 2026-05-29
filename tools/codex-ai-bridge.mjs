@@ -4,6 +4,27 @@ const bridgePort = Number(process.env.CODEX_AI_BRIDGE_PORT || 45124);
 const codexUrl = process.env.CODEX_APP_SERVER_URL || "ws://127.0.0.1:45123";
 const codexRequestTimeoutMs = Number(process.env.CODEX_AI_BRIDGE_TIMEOUT_MS || 900000);
 
+function codexHttpUrl(pathname) {
+  const url = new URL(codexUrl);
+  url.protocol = url.protocol === "wss:" ? "https:" : "http:";
+  url.pathname = pathname;
+  url.search = "";
+  url.hash = "";
+  return url.toString();
+}
+
+async function codexReadyStatus() {
+  try {
+    const response = await fetch(codexHttpUrl("/readyz"), { method: "GET" });
+    if (!response.ok) {
+      return { codexReady: false, codexError: `Codex App Server readyz failed: ${response.status}` };
+    }
+    return { codexReady: true };
+  } catch (error) {
+    return { codexReady: false, codexError: error.message };
+  }
+}
+
 function sendJson(response, status, body) {
   response.writeHead(status, {
     "Access-Control-Allow-Origin": "http://127.0.0.1:4173",
@@ -200,7 +221,7 @@ const server = http.createServer(async (request, response) => {
     return;
   }
   if (request.method === "GET" && request.url === "/healthz") {
-    sendJson(response, 200, { ok: true, codexUrl });
+    sendJson(response, 200, { ok: true, codexUrl, ...(await codexReadyStatus()) });
     return;
   }
   if (request.method !== "POST" || request.url !== "/codex-json") {

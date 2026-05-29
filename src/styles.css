@@ -394,6 +394,30 @@ button:disabled {
   line-height: 1.45;
 }
 
+.connection-test-result {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #f7fafb;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.connection-test-result.success {
+  border-color: rgba(47, 157, 114, 0.34);
+  background: #eaf7ef;
+  color: #20724e;
+}
+
+.connection-test-result.error {
+  border-color: rgba(225, 37, 37, 0.28);
+  background: #fff2f2;
+  color: #b42323;
+}
+
 .view-switch {
   display: flex;
   gap: 4px;

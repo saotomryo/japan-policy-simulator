@@ -2,6 +2,7 @@ let appData;
 let saveStatus = "未保存";
 let aiNotice = "";
 let aiErrorDialog = null;
+let aiConnectionTest = null;
 let activeView = "dashboard";
 let activeVoiceChart = "map";
 let activeAnnualChart = "metrics";
@@ -18,6 +19,7 @@ let isNationalGenerating = false;
 const showLongTermResultSection = false;
 const AI_CHAT_TIMEOUT_MS = 300000;
 const AI_GENERATION_TIMEOUT_MS = 900000;
+const AI_CONNECTION_TEST_TIMEOUT_MS = 30000;
 
 const providerPresets = {
   sample: { label: "固定サンプル", baseUrl: "", model: "sample" },
@@ -864,15 +866,19 @@ function assertAiConnection() {
   }
 }
 
-function saveAiConfig(formData) {
+function aiConfigFromFormData(formData) {
   const provider = formData.get("provider") || "sample";
   const preset = providerPresets[provider] || providerPresets.sample;
-  aiConfig = {
+  return {
     provider,
     baseUrl: formData.get("baseUrl") || preset.baseUrl,
     model: formData.get("model") || preset.model,
     apiKey: formData.get("apiKey") || "",
   };
+}
+
+function saveAiConfig(formData) {
+  aiConfig = aiConfigFromFormData(formData);
   if (aiConfig.apiKey) {
     sessionStorage.setItem("national-policy-ai-key", aiConfig.apiKey);
     sessionStorage.removeItem("school-sim-ai-key");
@@ -890,6 +896,7 @@ function saveAiConfig(formData) {
   );
   localStorage.removeItem("school-sim-ai-config");
   aiNotice = "";
+  aiConnectionTest = null;
 }
 
 function extractResponseText(responseJson) {
@@ -943,6 +950,62 @@ function aiStatusText() {
     return `${providerLabel()} / ${aiConfig.baseUrl}`;
   }
   return `${providerLabel()} / ${aiConfig.model}`;
+}
+
+function buildCodexHealthUrl(baseUrl) {
+  const url = new URL(baseUrl || providerPresets.codex_app_server.baseUrl);
+  url.pathname = "/healthz";
+  url.search = "";
+  url.hash = "";
+  return url.toString();
+}
+
+function openAiModelsUrl(baseUrl) {
+  return `${baseUrl.replace(/\/$/, "")}/models`;
+}
+
+async function testCodexAppServerConnection(config) {
+  const response = await fetch(buildCodexHealthUrl(config.baseUrl), { method: "GET", cache: "no-store" });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(`Codex local bridge health check failed: ${response.status}`);
+  }
+  if (body.codexReady === false) {
+    throw new Error(body.codexError || "Codex App Server is not ready");
+  }
+  return body.codexReady === true ? "CodexローカルブリッジとCodex App Serverに接続できました。" : "Codexローカルブリッジに接続できました。";
+}
+
+async function testOpenAiModelsConnection(config) {
+  if (!config.baseUrl) throw new Error("Base URLが未入力です。");
+  if (providerRequiresApiKey(config.provider) && !config.apiKey) throw new Error("API Keyが未入力です。");
+  const response = await fetch(openAiModelsUrl(config.baseUrl), {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${config.apiKey}`,
+    },
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Models endpoint failed: ${response.status} ${body.slice(0, 160)}`);
+  }
+  const data = await response.json().catch(() => ({}));
+  const count = Array.isArray(data.data) ? data.data.length : 0;
+  return count ? `APIに接続できました。取得モデル数: ${count}` : "APIに接続できました。";
+}
+
+async function testAiConnection(config) {
+  if (config.provider === "sample") {
+    return "固定サンプルは外部接続を使いません。";
+  }
+  if (config.provider === "codex_app_server") {
+    return testCodexAppServerConnection(config);
+  }
+  if (config.provider === "openai_responses" || config.provider === "openai_compatible_chat") {
+    return testOpenAiModelsConnection(config);
+  }
+  throw new Error(`Provider is not implemented: ${config.provider}`);
 }
 
 function setAiErrorNotice(error) {
@@ -5945,6 +6008,7 @@ function App(data) {
 }
 
 function AiSettingsModal() {
+  const testClass = aiConnectionTest?.status === "success" ? "success" : aiConnectionTest?.status === "error" ? "error" : "running";
   return `
     <div id="ai-settings-modal" class="modal-backdrop" hidden>
       <form id="ai-settings-form" class="modal">
@@ -5977,8 +6041,10 @@ function AiSettingsModal() {
           <span>API Key</span>
           <input name="apiKey" type="password" value="${aiConfig.apiKey}" placeholder="Codex App Serverでは不要" />
         </label>
+        ${aiConnectionTest ? `<div class="connection-test-result ${testClass}">${escapeHtml(aiConnectionTest.message)}</div>` : ""}
         <div class="modal-actions">
           <button id="ai-settings-clear" type="button">クリア</button>
+          <button id="ai-connection-test" type="button">接続テスト</button>
           <button class="primary" type="submit">保存</button>
         </div>
       </form>
@@ -6324,6 +6390,7 @@ function bindInteractions() {
     aiConfig.baseUrl = "";
     aiConfig.model = "sample";
     aiNotice = "";
+    aiConnectionTest = null;
     App(appData);
   });
   document.querySelector("#use-codex-local")?.addEventListener("click", () => {
@@ -6346,6 +6413,7 @@ function bindInteractions() {
     );
     localStorage.removeItem("school-sim-ai-config");
     aiNotice = "";
+    aiConnectionTest = null;
     App(appData);
   });
   document.querySelector("#ai-settings-form select[name='provider']")?.addEventListener("change", (event) => {
@@ -6356,6 +6424,26 @@ function bindInteractions() {
     if (!providerRequiresApiKey(event.currentTarget.value)) {
       form.elements.apiKey.value = "";
     }
+    aiConnectionTest = null;
+    form.querySelector(".connection-test-result")?.remove();
+  });
+  document.querySelector("#ai-connection-test")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    const form = document.querySelector("#ai-settings-form");
+    const config = aiConfigFromFormData(new FormData(form));
+    button.disabled = true;
+    button.textContent = "接続確認中";
+    aiConnectionTest = { status: "running", message: `${providerPresets[config.provider]?.label || config.provider} への接続を確認しています。` };
+    App(appData);
+    try {
+      const message = await withTimeout(testAiConnection(config), AI_CONNECTION_TEST_TIMEOUT_MS, "接続テストが30秒以内に完了しませんでした。");
+      aiConnectionTest = { status: "success", message };
+      aiNotice = "";
+    } catch (error) {
+      aiConnectionTest = { status: "error", message: `接続テスト失敗: ${error.message}` };
+      aiNotice = aiConnectionTest.message;
+    }
+    App(appData);
   });
   document.querySelector("#ai-settings-form")?.addEventListener("submit", (event) => {
     event.preventDefault();
