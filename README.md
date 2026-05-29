@@ -106,6 +106,8 @@ npm run dev
 npm run codex:app-server
 ```
 
+このコマンドはmacOS版Codexアプリ同梱の `/Applications/Codex.app/Contents/Resources/codex` を使います。Codexアプリを別の場所に置いている場合は、`package.json` の `codex:app-server` を実際のパスに合わせて変更してください。
+
 3つ目のターミナルで、ブラウザから呼べるHTTPブリッジを起動します。
 
 ```bash

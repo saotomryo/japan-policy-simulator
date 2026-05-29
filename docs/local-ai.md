@@ -45,6 +45,8 @@ Codex App Server:
 npm run codex:app-server
 ```
 
+macOS版Codexアプリでは、通常のターミナルに `codex` コマンドが入っていない場合があります。そのため `package.json` の `codex:app-server` は `/Applications/Codex.app/Contents/Resources/codex` を直接呼び出します。Codexアプリの配置場所が異なる場合は、このパスを実環境に合わせて変更してください。
+
 HTTPブリッジ:
 
 ```bash
