@@ -3,6 +3,7 @@ let saveStatus = "未保存";
 let aiNotice = "";
 let aiErrorDialog = null;
 let aiConnectionTest = null;
+let aiSettingsModalOpen = false;
 let activeView = "dashboard";
 let activeVoiceChart = "map";
 let activeAnnualChart = "metrics";
@@ -6010,7 +6011,7 @@ function App(data) {
 function AiSettingsModal() {
   const testClass = aiConnectionTest?.status === "success" ? "success" : aiConnectionTest?.status === "error" ? "error" : "running";
   return `
-    <div id="ai-settings-modal" class="modal-backdrop" hidden>
+    <div id="ai-settings-modal" class="modal-backdrop" ${aiSettingsModalOpen ? "" : "hidden"}>
       <form id="ai-settings-form" class="modal">
         <div class="panel-header">
           <div>
@@ -6375,10 +6376,12 @@ function bindInteractions() {
     await initializeWithAi();
   });
   document.querySelector("#ai-settings")?.addEventListener("click", () => {
-    document.querySelector("#ai-settings-modal").hidden = false;
+    aiSettingsModalOpen = true;
+    App(appData);
   });
   document.querySelector("#ai-settings-close")?.addEventListener("click", () => {
-    document.querySelector("#ai-settings-modal").hidden = true;
+    aiSettingsModalOpen = false;
+    App(appData);
   });
   document.querySelector("#ai-settings-clear")?.addEventListener("click", () => {
     sessionStorage.removeItem("national-policy-ai-key");
@@ -6391,6 +6394,7 @@ function bindInteractions() {
     aiConfig.model = "sample";
     aiNotice = "";
     aiConnectionTest = null;
+    aiSettingsModalOpen = true;
     App(appData);
   });
   document.querySelector("#use-codex-local")?.addEventListener("click", () => {
@@ -6414,6 +6418,7 @@ function bindInteractions() {
     localStorage.removeItem("school-sim-ai-config");
     aiNotice = "";
     aiConnectionTest = null;
+    aiSettingsModalOpen = true;
     App(appData);
   });
   document.querySelector("#ai-settings-form select[name='provider']")?.addEventListener("change", (event) => {
@@ -6434,6 +6439,7 @@ function bindInteractions() {
     button.disabled = true;
     button.textContent = "接続確認中";
     aiConnectionTest = { status: "running", message: `${providerPresets[config.provider]?.label || config.provider} への接続を確認しています。` };
+    aiSettingsModalOpen = true;
     App(appData);
     try {
       const message = await withTimeout(testAiConnection(config), AI_CONNECTION_TEST_TIMEOUT_MS, "接続テストが30秒以内に完了しませんでした。");
@@ -6443,11 +6449,13 @@ function bindInteractions() {
       aiConnectionTest = { status: "error", message: `接続テスト失敗: ${error.message}` };
       aiNotice = aiConnectionTest.message;
     }
+    aiSettingsModalOpen = true;
     App(appData);
   });
   document.querySelector("#ai-settings-form")?.addEventListener("submit", (event) => {
     event.preventDefault();
     saveAiConfig(new FormData(event.currentTarget));
+    aiSettingsModalOpen = false;
     App(appData);
   });
   document.querySelector("#issue-chat-send")?.addEventListener("click", async () => {
