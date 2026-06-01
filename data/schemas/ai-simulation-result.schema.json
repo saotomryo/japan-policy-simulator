@@ -8,17 +8,6 @@
     "summary": { "type": "string" },
     "visibleMetricDeltas": {
       "type": "object",
-      "required": [
-        "support",
-        "happiness",
-        "academic",
-        "fairness",
-        "rule",
-        "participation",
-        "externalReputation",
-        "externalAchievements",
-        "teacherSatisfaction"
-      ],
       "properties": {
         "support": { "type": "number" },
         "happiness": { "type": "number" },
@@ -28,7 +17,19 @@
         "participation": { "type": "number" },
         "externalReputation": { "type": "number" },
         "externalAchievements": { "type": "number" },
-        "teacherSatisfaction": { "type": "number" }
+        "teacherSatisfaction": { "type": "number" },
+        "fiscalCapacity": { "type": "number" },
+        "socialSecurity": { "type": "number" },
+        "economicRipple": { "type": "number" },
+        "digitalUtilization": { "type": "number" },
+        "implementationRisk": { "type": "number" },
+        "regionalMobility": { "type": "number" },
+        "safetyTrust": { "type": "number" },
+        "importIndustryImpact": { "type": "number" },
+        "exportIndustryImpact": { "type": "number" },
+        "manufacturingImpact": { "type": "number" },
+        "agricultureImpact": { "type": "number" },
+        "financeIndustryImpact": { "type": "number" }
       },
       "additionalProperties": false
     },

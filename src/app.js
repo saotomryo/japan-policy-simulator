@@ -647,7 +647,7 @@ function reportResultSection(result = appData.lastSimulationResult) {
       <h3>指標変化</h3>
       <div class="delta-grid">
         ${Object.entries(result.visibleMetricDeltas || {})
-          .map(([key, value]) => `<div><span>${metricLabel(key)}</span><strong class="${value >= 0 ? "good" : "warn"}">${value > 0 ? "+" : ""}${value}</strong></div>`)
+          .map(([key, value]) => `<div><span>${metricLabel(key)}</span><strong class="${deltaToneForMetric(key, value)}">${value > 0 ? "+" : ""}${value}</strong></div>`)
           .join("")}
       </div>
       <h3>属性別影響</h3>
@@ -895,6 +895,9 @@ function applySaveFile(saveFile) {
   }
   if (saveFile.currentState?.policyChat?.messages?.length) {
     appData.policyChat = saveFile.currentState.policyChat;
+  }
+  if (appData.lastSimulationResult) {
+    appData.lastSimulationResult = normalizeSimulationResult(appData.lastSimulationResult);
   }
   appData.memory = {
     timeline: saveFile.timeline,
@@ -1889,7 +1892,7 @@ function clamp(value, min = 0, max = 100) {
 function samplePolicySimulationResult() {
   if (isNationalScenario()) {
     const cashUse = appData.policy.cashUse || 0;
-    return {
+    return normalizeSimulationResult({
       summary: `${appData.policy.title}により、短期的には家計負担感と政策納得度が改善した。一方で、財源補填と社会保障持続性への懸念は今後の検討課題として残る。`,
       visibleMetricDeltas: {
         support: 6,
@@ -1928,7 +1931,7 @@ function samplePolicySimulationResult() {
       ],
       randomEvents: ["物価高への関心が続き、短期的な支持は想定より広がった"],
       nextIssues: ["財源補填の説明", "社会保障持続性の観測", "時限措置終了時の出口戦略"],
-    };
+    });
   }
   const effects = appData.policy.effects || [];
   const metricDeltas = Object.fromEntries(effects.map((effect) => [effect.label, effect.value]));
@@ -1964,13 +1967,17 @@ function samplePolicySimulationResult() {
 }
 
 async function simulatePolicyResult() {
+  const policyTarget = selectedPolicyTarget();
+  const targetMetricBindings = policyTargetMetricBindings(policyTarget);
   const prompt = JSON.stringify(
     {
-      task: "採用施策の実行結果を1学期単位でシミュレーションしてください。",
+      task: isNationalScenario() ? "採用した政策案の短期実行結果をシミュレーションしてください。" : "採用施策の実行結果を1学期単位でシミュレーションしてください。",
       simulation: {
         scenario: appData.scenario,
         visibleMetrics: appData.metrics.filter((metric) => metric.visible),
         allMetrics: appData.metrics,
+        selectedPolicyTarget: policyTarget,
+        targetMetricBindings,
         hiddenScores: currentHiddenScores(appData),
         financeMetrics: appData.financeMetrics,
         groups: appData.groups,
@@ -1980,7 +1987,14 @@ async function simulatePolicyResult() {
         memorySummary: getMemory(appData).memorySummary,
       },
       constraints: [
-        "1学期に実行する施策は1つ",
+        isNationalScenario() ? "実行する政策案は1つ" : "1学期に実行する施策は1つ",
+        ...userFacingOutputRules(),
+        "visibleMetricDeltasのキーはallMetricsに存在するidだけを使う",
+        "selectedPolicyTarget.relatedMetricIdsに含まれる指標は、visibleMetricDeltasで必ず評価する",
+        "policy.shortTermEffectsに含まれる指標は、visibleMetricDeltasでも優先して扱う",
+        "visibleMetricDeltasは英語名や内部キーを本文に混ぜず、本文では日本語ラベルで説明する",
+        "implementationRisk、rule、teacherSatisfactionは、値が増えるほど悪化する指標として扱う。リスクや負担が増える場合はマイナス、低下する場合はプラスの効果として返す",
+        "政策コストや税収影響の計算説明は、割合・母数・金額の桁が整合するよう自己レビューする",
         "指標変更は論理的な帰結を基本にし、軽いランダム要素を1つ加える",
         "見える指標、見えない内部スコア、財務、属性別影響を分ける",
         "キャッシュ消費と副作用を必ず扱う",
@@ -1996,15 +2010,79 @@ async function simulatePolicyResult() {
   assertAiConnection();
 
   try {
-    return await callProviderJson({
+    const result = await callProviderJson({
       schemaName: "ai-simulation-result",
       prompt,
     });
+    return normalizeSimulationResult(result);
   } catch (error) {
     console.warn(error);
     setAiErrorNotice(error);
     throw error;
   }
+}
+
+function policyMetricDeltas() {
+  if (appData.policy?.shortTermEffects && typeof appData.policy.shortTermEffects === "object") {
+    return Object.fromEntries(
+      Object.entries(appData.policy.shortTermEffects).filter(([, value]) => Number.isFinite(Number(value))),
+    );
+  }
+  return Object.fromEntries((appData.policy?.effects || []).map((effect) => [effect.label, effect.value]));
+}
+
+function resultMetricOrder() {
+  const ids = [
+    ...(selectedPolicyTarget()?.relatedMetricIds || []),
+    ...Object.keys(policyMetricDeltas()),
+    ...appData.metrics.filter((metric) => metric.visible).map((metric) => metric.id),
+  ];
+  return [...new Set(ids)].filter((id) => metricById(id));
+}
+
+function normalizeSimulationResult(result = {}) {
+  if (!isNationalScenario()) return result;
+  const allowedMetricIds = new Set(appData.metrics.map((metric) => metric.id));
+  const policyDeltas = policyMetricDeltas();
+  const incomingDeltas = result.visibleMetricDeltas || {};
+  const mergedDeltas = {};
+
+  resultMetricOrder().forEach((id) => {
+    const incoming = Number(incomingDeltas[id]);
+    const fromPolicy = Number(policyDeltas[id]);
+    if (Number.isFinite(incoming)) {
+      mergedDeltas[id] = incoming;
+    } else if (Number.isFinite(fromPolicy)) {
+      mergedDeltas[id] = fromPolicy;
+    }
+  });
+
+  Object.entries(incomingDeltas).forEach(([id, value]) => {
+    const delta = Number(value);
+    if (allowedMetricIds.has(id) && Number.isFinite(delta) && !Object.prototype.hasOwnProperty.call(mergedDeltas, id)) {
+      mergedDeltas[id] = delta;
+    }
+  });
+
+  return {
+    summary: result.summary || "政策実行後の短期影響を確認しました。",
+    visibleMetricDeltas: mergedDeltas,
+    hiddenScoreDeltas: {
+      trust: 0,
+      polarization: 0,
+      fatigue: 0,
+      publicValue: 0,
+      ...(result.hiddenScoreDeltas || {}),
+    },
+    financeDelta: {
+      budget: 0,
+      cash: -(appData.policy?.cashUse || 0),
+      ...(result.financeDelta || {}),
+    },
+    groupImpacts: Array.isArray(result.groupImpacts) ? result.groupImpacts : [],
+    randomEvents: Array.isArray(result.randomEvents) ? result.randomEvents : [],
+    nextIssues: Array.isArray(result.nextIssues) ? result.nextIssues : [],
+  };
 }
 
 function updateMetricSeriesAfterSimulation() {
@@ -2034,7 +2112,7 @@ function applySimulationResult(result) {
       ...metric,
       value: clamp(metric.value + delta),
       delta,
-      tone: delta > 0 ? "good" : delta < 0 ? "warn" : metric.tone,
+      tone: deltaToneForMetric(metric.id, delta),
     };
   });
 
@@ -2411,6 +2489,21 @@ async function advanceToNextTurn() {
 
 function metricLabel(metricId) {
   return appData.metrics.find((metric) => metric.id === metricId)?.label || metricId;
+}
+
+function financeMetricLabel(metricId) {
+  return appData.financeMetrics.find((metric) => metric.id === metricId)?.label || metricId;
+}
+
+function negativeWhenHigherMetricIds() {
+  return new Set(["rule", "teacherSatisfaction", "implementationRisk"]);
+}
+
+function deltaToneForMetric(metricId, delta) {
+  if (!delta) return "warn";
+  const worsensWhenHigher = negativeWhenHigherMetricIds().has(metricId);
+  const isGood = worsensWhenHigher ? delta < 0 : delta > 0;
+  return isGood ? "good" : "warn";
 }
 
 function annualMetricSeries(memory) {
@@ -3950,6 +4043,7 @@ async function generateNationalInitialPolicyWithAi(policyTarget, voices, voiceAn
         "負担増政策では、支持を広げるための補償策・時限措置・使途限定・低所得層還付などを実施内容に必ず含める",
         "policyTarget.designIssuesがある場合は、各争点の対立軸から1つ以上の方針を選び、implementationDetails、concerns、costBreakdownのいずれかに明記する",
         "costBreakdownは3件以上。何に対して、どう計算し、どの財源で賄うかをdetailsまで分解する",
+        "costBreakdownのcalculationは、母数・割合・金額の桁がamountと整合するようにする。例: 7兆円の0.6%は420億円であり4200億円ではない",
         "shortTermEffectsはavailableMetricIdsから該当する指標だけをキーにし、-12から+12程度の変化量にする",
         "segmentEffectsには、context.requiredEffectAxesに含まれる効果軸を必ず返す",
         "context.metricAxisBindingsは、policyTarget.relatedMetricIdsの各指標をどの効果軸に出すかの明示的な対応表である。各bindingのaxisに対応するsegmentEffects内で、そのmetricLabelに関係する影響をsummaryまたはreasonへ明記する",
@@ -4308,7 +4402,7 @@ function ResultEffectContent(axis = activeResultEffectAxis) {
         <h3>関連指標の短期効果</h3>
         <div class="impact-list">
           ${(appData.policy.effects || [])
-            .map((effect) => `<span class="${effect.tone}">${effect.label} ${effect.value > 0 ? "+" : ""}${effect.value}</span>`)
+            .map((effect) => `<span class="${effect.tone}">${metricLabel(effect.label)} ${effect.value > 0 ? "+" : ""}${effect.value}</span>`)
             .join("")}
         </div>
       </section>
@@ -4341,7 +4435,7 @@ function resultTopImpacts(result = appData.lastSimulationResult, limit = 5) {
 
 function ResultImpactBar(entry) {
   const width = Math.min(100, Math.max(8, Math.abs(entry.delta) * 8));
-  const tone = entry.delta >= 0 ? "good" : "warn";
+  const tone = deltaToneForMetric(entry.id, entry.delta);
   return `
     <div class="report-bar-row ${tone}">
       <span>${entry.label}</span>
@@ -5236,7 +5330,7 @@ function PolicyEffectPanel(policy) {
       <div><strong>長期影響</strong><span>確定結果ではなく予想として表示</span></div>
     </div>
     <div class="impact-list">
-      ${policy.effects.map((effect) => `<span class="${effect.tone}">${effect.label} ${effect.value > 0 ? "+" : ""}${effect.value}</span>`).join("")}
+      ${policy.effects.map((effect) => `<span class="${effect.tone}">${metricLabel(effect.label)} ${effect.value > 0 ? "+" : ""}${effect.value}</span>`).join("")}
     </div>
   `;
 }
@@ -5410,9 +5504,9 @@ function TurnResultPreview() {
       <p>${result.summary}</p>
       <div class="result-delta-list">
         ${Object.entries(result.visibleMetricDeltas)
-          .map(([key, value]) => `<b>${key} ${value > 0 ? "+" : ""}${value}</b>`)
+          .map(([key, value]) => `<b>${metricLabel(key)} ${value > 0 ? "+" : ""}${value}</b>`)
           .join("")}
-        <b>cash ${result.financeDelta.cash > 0 ? "+" : ""}${result.financeDelta.cash}</b>
+        <b>${financeMetricLabel("cash")} ${result.financeDelta.cash > 0 ? "+" : ""}${result.financeDelta.cash}</b>
       </div>
       <small>${result.randomEvents.join(" / ")}</small>
       ${isNationalScenario() ? `<span class="turn-end-label">政策実行は完了しました</span>` : currentTurn().term >= 3 ? `<span class="turn-end-label">年度末処理へ進めます</span>` : `<button id="advance-turn" type="button">次学期へ進む</button>`}
@@ -5447,7 +5541,7 @@ function PolicyHistoryCard(record, index) {
       </div>
       <div class="result-delta-list">
         ${metricEntries.map(([key, value]) => `<b>${metricLabel(key)} ${value > 0 ? "+" : ""}${value}</b>`).join("")}
-        ${financeEntries.map(([key, value]) => `<b>${key} ${value > 0 ? "+" : ""}${value}</b>`).join("")}
+        ${financeEntries.map(([key, value]) => `<b>${financeMetricLabel(key)} ${value > 0 ? "+" : ""}${value}</b>`).join("")}
       </div>
       <div class="annual-voice-list compact">
         ${record.voices.map(AnnualVoiceItem).join("")}
