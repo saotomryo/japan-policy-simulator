@@ -22,7 +22,12 @@
         "title": { "type": "string" },
         "field": { "type": "string" },
         "fit": { "type": "number", "minimum": 0, "maximum": 100 },
-        "metrics": { "type": "array", "minItems": 3, "items": { "type": "string" } },
+        "metrics": {
+          "type": "array",
+          "minItems": 3,
+          "description": "relatedMetricIdsで選んだ既存指標の表示ラベル。独自の新指標名は作らない。",
+          "items": { "type": "string" }
+        },
         "summary": { "type": "string" },
         "relatedMetricIds": {
           "type": "array",

@@ -396,7 +396,9 @@ function sanitizeEventForSave(event) {
 
 function sanitizePolicyTargetForSave(target) {
   const next = deepClone(target);
-  if (Array.isArray(next.metrics)) {
+  if (next.id?.startsWith("free_policy_") && Array.isArray(next.relatedMetricIds) && next.relatedMetricIds.length) {
+    next.metrics = metricLabelsForIds(next.relatedMetricIds);
+  } else if (Array.isArray(next.metrics)) {
     next.metrics = next.metrics.filter((metric) => !containsGeneratedMetaText(metric));
   }
   if (containsGeneratedMetaText(next.summary)) {
@@ -2635,10 +2637,14 @@ function metricAxisForMetric(metricId, metric) {
   return categoryAxis[metric?.category] || "clusters";
 }
 
+function metricLabelsForIds(metricIds = []) {
+  return metricIds.map((metricId) => metricById(metricId)?.label).filter(Boolean);
+}
+
 function policyTargetMetricBindings(policyTarget = selectedPolicyTarget()) {
   const metricIds = policyTarget?.relatedMetricIds || [];
   return metricIds.map((metricId) => {
-    const metric = appData.metrics?.find((item) => item.id === metricId);
+    const metric = metricById(metricId);
     return {
       metricId,
       metricLabel: metric?.label || metricId,
@@ -2811,6 +2817,9 @@ function normalizeAiFreePolicyTarget(generation, sourceText, scale = activeFreeP
   const generatedTarget = generation.policyTarget || {};
   const fallback = buildFreePolicyTarget(sourceText, scale);
   const relatedMetricIds = [...new Set((generatedTarget.relatedMetricIds || []).filter((metricId) => nationalMetricIds().includes(metricId)))];
+  if (relatedMetricIds.length < 3) {
+    throw new Error("AI構造化結果の関連指標IDが不足しています。既存指標IDから3件以上選ぶようにリトライしてください。");
+  }
   const supportedViews = ["income", "generation", "industry", "regional", "international", "fiscal", "implementation", "digital_access", "clusters"];
   const recommendedViews = [...new Set((generatedTarget.recommendedViews || []).filter((view) => supportedViews.includes(view)))];
   return sanitizePolicyTargetForSave({
@@ -2820,8 +2829,8 @@ function normalizeAiFreePolicyTarget(generation, sourceText, scale = activeFreeP
     sourceText,
     title: generatedTarget.title || fallback.title,
     fit: Math.max(0, Math.min(100, Math.round(generatedTarget.fit ?? fallback.fit))),
-    metrics: generatedTarget.metrics?.length ? generatedTarget.metrics : fallback.metrics,
-    relatedMetricIds: relatedMetricIds.length ? relatedMetricIds : fallback.relatedMetricIds,
+    metrics: metricLabelsForIds(relatedMetricIds),
+    relatedMetricIds,
     recommendedViews: recommendedViews.length ? recommendedViews : fallback.recommendedViews,
     designIssues: generatedTarget.designIssues?.length ? generatedTarget.designIssues : fallback.designIssues,
     fundingNote: generatedTarget.fundingNote || fallback.fundingNote,
@@ -2842,7 +2851,7 @@ async function generateFreePolicyTargetWithAi(text, scale = activeFreePolicyScal
       requirements: [
         "policyTarget.titleは政策内容が分かる短いタイトルにする",
         "policyTarget.fieldは政策分野名を日本語で書く",
-        "policyTarget.metricsは画面に表示する関連指標名を3から6件入れる",
+        "policyTarget.metricsはrelatedMetricIdsで選んだ既存指標のlabelをそのまま入れる。独自の新指標名を作らない",
         "policyTarget.relatedMetricIdsはavailableMetricIdsから、政策内容に直接関係するものを3から8件選ぶ",
         "policyTarget.recommendedViewsはrecommendedViewOptionsから、政策効果を見るべき軸を2から5件選ぶ。必ずclustersも含める",
         "policyTarget.designIssuesは制度設計上の争点を2から4件作る。各争点は政策内容に固有の対立軸にする",
