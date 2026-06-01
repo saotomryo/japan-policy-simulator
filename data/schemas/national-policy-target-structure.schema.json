@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "national-policy-target-structure.schema.json",
+  "title": "NationalPolicyTargetStructure",
+  "type": "object",
+  "required": ["policyTarget", "assistantMessage"],
+  "properties": {
+    "policyTarget": {
+      "type": "object",
+      "required": [
+        "title",
+        "field",
+        "fit",
+        "metrics",
+        "summary",
+        "relatedMetricIds",
+        "recommendedViews",
+        "fundingNote",
+        "designIssues"
+      ],
+      "properties": {
+        "title": { "type": "string" },
+        "field": { "type": "string" },
+        "fit": { "type": "number", "minimum": 0, "maximum": 100 },
+        "metrics": { "type": "array", "minItems": 3, "items": { "type": "string" } },
+        "summary": { "type": "string" },
+        "relatedMetricIds": {
+          "type": "array",
+          "minItems": 3,
+          "items": {
+            "type": "string",
+            "enum": [
+              "support",
+              "happiness",
+              "academic",
+              "fairness",
+              "rule",
+              "participation",
+              "externalReputation",
+              "externalAchievements",
+              "teacherSatisfaction",
+              "fiscalCapacity",
+              "socialSecurity",
+              "economicRipple",
+              "digitalUtilization",
+              "implementationRisk",
+              "regionalMobility",
+              "safetyTrust",
+              "importIndustryImpact",
+              "exportIndustryImpact",
+              "manufacturingImpact",
+              "agricultureImpact",
+              "financeIndustryImpact"
+            ]
+          }
+        },
+        "recommendedViews": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "string",
+            "enum": ["income", "generation", "industry", "regional", "international", "fiscal", "implementation", "digital_access", "clusters"]
+          }
+        },
+        "fundingNote": { "type": "string" },
+        "designIssues": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "object",
+            "required": ["id", "title", "axisA", "axisB", "description", "watchPoints"],
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "axisA": { "type": "string" },
+              "axisB": { "type": "string" },
+              "description": { "type": "string" },
+              "watchPoints": { "type": "array", "minItems": 2, "items": { "type": "string" } }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "assistantMessage": { "type": "string" }
+  },
+  "additionalProperties": false
+}

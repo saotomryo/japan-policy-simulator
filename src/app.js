@@ -2807,6 +2807,71 @@ function buildFreePolicyTarget(text, scale = activeFreePolicyScale) {
   };
 }
 
+function normalizeAiFreePolicyTarget(generation, sourceText, scale = activeFreePolicyScale) {
+  const generatedTarget = generation.policyTarget || {};
+  const fallback = buildFreePolicyTarget(sourceText, scale);
+  const relatedMetricIds = [...new Set((generatedTarget.relatedMetricIds || []).filter((metricId) => nationalMetricIds().includes(metricId)))];
+  const supportedViews = ["income", "generation", "industry", "regional", "international", "fiscal", "implementation", "digital_access", "clusters"];
+  const recommendedViews = [...new Set((generatedTarget.recommendedViews || []).filter((view) => supportedViews.includes(view)))];
+  return sanitizePolicyTargetForSave({
+    ...fallback,
+    ...generatedTarget,
+    id: fallback.id,
+    sourceText,
+    title: generatedTarget.title || fallback.title,
+    fit: Math.max(0, Math.min(100, Math.round(generatedTarget.fit ?? fallback.fit))),
+    metrics: generatedTarget.metrics?.length ? generatedTarget.metrics : fallback.metrics,
+    relatedMetricIds: relatedMetricIds.length ? relatedMetricIds : fallback.relatedMetricIds,
+    recommendedViews: recommendedViews.length ? recommendedViews : fallback.recommendedViews,
+    designIssues: generatedTarget.designIssues?.length ? generatedTarget.designIssues : fallback.designIssues,
+    fundingNote: generatedTarget.fundingNote || fallback.fundingNote,
+  });
+}
+
+async function generateFreePolicyTargetWithAi(text, scale = activeFreePolicyScale) {
+  if (usesFixedSampleProvider() || !hasAiConnection()) {
+    throw new Error("自由記述の政策ターゲット化はAI接続時のみ実行できます。AI設定でCodex App ServerまたはOpenAI接続を有効にしてください。");
+  }
+  assertAiConnection();
+  const prompt = JSON.stringify(
+    {
+      task: "自由記述された政策本文を、国版政策シミュレーターの政策ターゲットとして構造化してください。この段階では声、クラスター、政策案は作成しません。",
+      sourceText: text,
+      requestedScale: scale,
+      outputHygiene: userFacingOutputRules(),
+      requirements: [
+        "policyTarget.titleは政策内容が分かる短いタイトルにする",
+        "policyTarget.fieldは政策分野名を日本語で書く",
+        "policyTarget.metricsは画面に表示する関連指標名を3から6件入れる",
+        "policyTarget.relatedMetricIdsはavailableMetricIdsから、政策内容に直接関係するものを3から8件選ぶ",
+        "policyTarget.recommendedViewsはrecommendedViewOptionsから、政策効果を見るべき軸を2から5件選ぶ。必ずclustersも含める",
+        "policyTarget.designIssuesは制度設計上の争点を2から4件作る。各争点は政策内容に固有の対立軸にする",
+        "fundingNoteには財源、実装費、税 expenditure、行政・事業者負担など該当する注意点を書く",
+        "本文にない既存政策分野へ無理に寄せない。ただしその説明を出力文へ書かず、政策そのものの分析として表現する",
+      ],
+      availableMetricIds: nationalMetricIds(),
+      metricCatalog: [...appData.metrics, ...appData.financeMetrics].map((metric) => ({
+        id: metric.id,
+        label: metric.label,
+        category: metric.category,
+        description: metric.description,
+      })),
+      recommendedViewOptions: ["income", "generation", "industry", "regional", "international", "fiscal", "implementation", "digital_access", "clusters"],
+    },
+    null,
+    2,
+  );
+  const generation = await withTimeout(
+    callProviderJson({ schemaName: "national-policy-target-structure", prompt }),
+    AI_CHAT_TIMEOUT_MS,
+    "政策ターゲット構造化のAI応答が5分以内に返りませんでした",
+  );
+  return {
+    policyTarget: normalizeAiFreePolicyTarget(generation, text, scale),
+    assistantMessage: generation.assistantMessage || "自由記述を政策ターゲットとして構造化しました。",
+  };
+}
+
 function upsertFreePolicyTarget(policyTarget) {
   const removeFreeTargets = (item) => !item.id?.startsWith("free_policy_");
   appData.policyTargets = [policyTarget, ...(appData.policyTargets || []).filter(removeFreeTargets)];
@@ -2825,9 +2890,7 @@ function upsertFreePolicyTarget(policyTarget) {
   appData.issueSelectionChat.messages.push({ role: "user", text: `自由記述政策「${policyTarget.title}」を追加しました。` });
   appData.issueSelectionChat.messages.push({
     role: "assistant",
-    text: requiresAiFreeInference(policyTarget)
-      ? `自由記述を政策ターゲット化しました。自由記述は固定サンプルでは生成せず、「声の分析へ進む」以降はAI接続時のみ実行します。${policyTarget.fundingNote}`
-      : `自由記述を政策ターゲット化しました。関連指標は ${policyTarget.metrics.join(" / ")}、推奨ビューは ${policyTarget.recommendedViews.join(" / ")} です。${policyTarget.fundingNote}`,
+    text: `自由記述を政策ターゲット化しました。関連指標は ${policyTarget.metrics.join(" / ")}、推奨ビューは ${policyTarget.recommendedViews.map(effectAxisTitle).join(" / ")} です。${policyTarget.fundingNote}`,
   });
   resetPolicyDrivenViews(policyTarget);
 }
@@ -4047,6 +4110,7 @@ function effectAxisTitle(axis) {
     fiscal: "財政影響",
     implementation: "実装リスク",
     digital_access: "デジタル利用度",
+    clusters: "声のクラスター",
   };
   return titles[axis] || axis;
 }
@@ -4998,8 +5062,8 @@ function FreePolicyTargetForm() {
           )
           .join("")}
       </div>
-      <button id="structure-free-policy" class="primary" type="button">政策ターゲット化</button>
-      <p>入力内容から関連指標と推奨ビューを仮生成し、政策ターゲットとして選択します。</p>
+      <button id="structure-free-policy" class="primary" type="button">AIで政策ターゲット化</button>
+      <p>AI接続時のみ、入力内容から関連指標、推奨ビュー、制度設計上の争点を構造化します。</p>
     </div>
   `;
 }
@@ -6282,7 +6346,8 @@ function bindInteractions() {
       App(appData);
     });
   });
-  document.querySelector("#structure-free-policy")?.addEventListener("click", () => {
+  document.querySelector("#structure-free-policy")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
     const input = document.querySelector("#free-policy-input");
     const text = input?.value.trim() || "";
     if (!text) {
@@ -6291,8 +6356,34 @@ function bindInteractions() {
       return;
     }
     freePolicyDraftText = text;
-    upsertFreePolicyTarget(buildFreePolicyTarget(text));
+    button.disabled = true;
+    button.textContent = "AI構造化中";
+    saveStatus = "自由記述政策をAIで構造化しています";
     App(appData);
+    try {
+      const generation = await generateFreePolicyTargetWithAi(text, activeFreePolicyScale);
+      upsertFreePolicyTarget(generation.policyTarget);
+      if (generation.assistantMessage) {
+        appData.issueSelectionChat.messages.push({ role: "assistant", text: generation.assistantMessage });
+      }
+      saveStatus = "自由記述政策をAIで政策ターゲット化しました";
+      App(appData);
+    } catch (error) {
+      console.warn(error);
+      showAiErrorDialog({
+        title: "政策ターゲット構造化エラー",
+        error,
+        retry: async () => {
+          const retryGeneration = await generateFreePolicyTargetWithAi(text, activeFreePolicyScale);
+          upsertFreePolicyTarget(retryGeneration.policyTarget);
+          if (retryGeneration.assistantMessage) {
+            appData.issueSelectionChat.messages.push({ role: "assistant", text: retryGeneration.assistantMessage });
+          }
+          saveStatus = "自由記述政策をAIで政策ターゲット化しました";
+          App(appData);
+        },
+      });
+    }
   });
   document.querySelector("#generate-target-analysis")?.addEventListener("click", async (event) => {
     const button = event.currentTarget;
