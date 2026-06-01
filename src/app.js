@@ -344,11 +344,82 @@ function buildPolicyChatSnapshot(data) {
 }
 
 function buildPolicySnapshot(data) {
-  return data.policy ? JSON.parse(JSON.stringify(data.policy)) : null;
+  return data.policy ? sanitizeGeneratedPolicyDraft(JSON.parse(JSON.stringify(data.policy))) : null;
 }
 
 function deepClone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+const generatedOutputMetaPatterns = [
+  /既存プリセット/,
+  /固定テンプレート/,
+  /テンプレートに落と/,
+  /AI生成時/,
+  /AIが.*推論/,
+  /policyTarget/i,
+  /designIssues/i,
+  /context\./i,
+  /JSON Schema/i,
+  /プロンプト/,
+  /出力前に自己レビュー/,
+];
+
+function containsGeneratedMetaText(value) {
+  return typeof value === "string" && generatedOutputMetaPatterns.some((pattern) => pattern.test(value));
+}
+
+function sanitizeGeneratedStringList(items = []) {
+  return items.filter((item) => typeof item === "string" && item.trim() && !containsGeneratedMetaText(item));
+}
+
+function sanitizeGeneratedPolicyDraft(draft = {}) {
+  return {
+    ...draft,
+    implementationDetails: sanitizeGeneratedStringList(draft.implementationDetails),
+    expectedEffects: sanitizeGeneratedStringList(draft.expectedEffects),
+    concerns: sanitizeGeneratedStringList(draft.concerns),
+    risks: sanitizeGeneratedStringList(draft.risks),
+  };
+}
+
+function sanitizeEventForSave(event) {
+  const next = deepClone(event);
+  if (next.payload?.draft) {
+    next.payload.draft = sanitizeGeneratedPolicyDraft(next.payload.draft);
+  }
+  if (next.payload?.policy) {
+    next.payload.policy = sanitizeGeneratedPolicyDraft(next.payload.policy);
+  }
+  return next;
+}
+
+function sanitizePolicyTargetForSave(target) {
+  const next = deepClone(target);
+  if (Array.isArray(next.metrics)) {
+    next.metrics = next.metrics.filter((metric) => !containsGeneratedMetaText(metric));
+  }
+  if (containsGeneratedMetaText(next.summary)) {
+    next.summary = `${next.title}。政策分野、関連指標、対象層、財源規模を確認します。`;
+  }
+  if (containsGeneratedMetaText(next.fundingNote)) {
+    next.fundingNote = "財源規模、対象範囲、実装主体を確認します。";
+  }
+  if (Array.isArray(next.designIssues)) {
+    next.designIssues = next.designIssues.filter((issue) => ![issue.title, issue.axisA, issue.axisB, issue.description].some(containsGeneratedMetaText));
+  }
+  return next;
+}
+
+function sanitizeIssueForSave(issue) {
+  const next = deepClone(issue);
+  if (Array.isArray(next.metrics)) {
+    next.metrics = next.metrics.filter((metric) => !containsGeneratedMetaText(metric));
+  }
+  if (containsGeneratedMetaText(next.summary)) {
+    next.summary = `${next.title}。関連指標、対象層、財源規模を確認します。`;
+  }
+  return next;
 }
 
 function buildEventLogForSave(memory, data, exportedAt) {
@@ -360,7 +431,7 @@ function buildEventLogForSave(memory, data, exportedAt) {
     summary: isNationalScenario(data) ? "保存時点の政策ターゲットチャット履歴" : "保存時点の課題選択チャット履歴",
     payload: { issueSelectionChat: buildIssueSelectionChatSnapshot(data) },
   };
-  return [...memory.eventLog.filter((event) => event.id !== issueChatEvent.id), issueChatEvent];
+  return [...memory.eventLog.filter((event) => event.id !== issueChatEvent.id).map(sanitizeEventForSave), issueChatEvent];
 }
 
 function assertSaveFileHasNoSecrets(saveFile) {
@@ -401,8 +472,8 @@ function buildSaveFile(data) {
       seasonalEvents: deepClone(data.seasonalEvents || []),
       voices: deepClone(data.voices),
       voiceAnalysis: deepClone(data.voiceAnalysis),
-      issues: deepClone(data.issues),
-      policyTargets: deepClone(data.policyTargets || []),
+      issues: (data.issues || []).map(sanitizeIssueForSave),
+      policyTargets: (data.policyTargets || []).map(sanitizePolicyTargetForSave),
       targetMockData: deepClone(data.targetMockData || {}),
       selectedIssueId: data.issueSelectionChat.selectedIssueId || null,
       selectedPolicyTargetId: data.issueSelectionChat.selectedIssueId || null,
@@ -818,7 +889,7 @@ function applySaveFile(saveFile) {
     };
   }
   if (saveFile.currentState?.policyDraft) {
-    appData.policy = saveFile.currentState.policyDraft;
+    appData.policy = sanitizeGeneratedPolicyDraft(saveFile.currentState.policyDraft);
   }
   if (saveFile.currentState?.policyChat?.messages?.length) {
     appData.policyChat = saveFile.currentState.policyChat;
@@ -1507,31 +1578,32 @@ function applyFoodReducedTaxRevision(draft, userText) {
 }
 
 function applyPolicyDraft(draft, options = {}) {
+  const sanitizedDraft = sanitizeGeneratedPolicyDraft(draft);
   appData.policy = {
-    id: draft.id,
-    title: draft.title,
-    summary: draft.summary,
-    budget: draft.budget,
-    cashUse: draft.cashUse,
-    financePlan: draft.financePlan,
-    costBreakdown: draft.costBreakdown || appData.policy?.costBreakdown || [],
-    implementationDetails: draft.implementationDetails?.length ? draft.implementationDetails : [draft.summary],
-    expectedEffects: draft.expectedEffects?.length
-      ? draft.expectedEffects
-      : Object.entries(draft.shortTermEffects || {}).map(([label, value]) => `${label}: ${value > 0 ? "+" : ""}${value}`),
-    concerns: draft.concerns?.length ? draft.concerns : draft.risks || [],
-    beneficiaryGroups: normalizePolicyGroupItems(draft.beneficiaryGroups),
-    lowBenefitGroups: normalizePolicyGroupItems(draft.lowBenefitGroups),
-    shortTermEffects: draft.shortTermEffects || {},
-    longTermEffects: draft.longTermEffects || {},
-    risks: draft.risks || [],
+    id: sanitizedDraft.id,
+    title: sanitizedDraft.title,
+    summary: sanitizedDraft.summary,
+    budget: sanitizedDraft.budget,
+    cashUse: sanitizedDraft.cashUse,
+    financePlan: sanitizedDraft.financePlan,
+    costBreakdown: sanitizedDraft.costBreakdown || appData.policy?.costBreakdown || [],
+    implementationDetails: sanitizedDraft.implementationDetails?.length ? sanitizedDraft.implementationDetails : [sanitizedDraft.summary],
+    expectedEffects: sanitizedDraft.expectedEffects?.length
+      ? sanitizedDraft.expectedEffects
+      : Object.entries(sanitizedDraft.shortTermEffects || {}).map(([label, value]) => `${label}: ${value > 0 ? "+" : ""}${value}`),
+    concerns: sanitizedDraft.concerns?.length ? sanitizedDraft.concerns : sanitizedDraft.risks || [],
+    beneficiaryGroups: normalizePolicyGroupItems(sanitizedDraft.beneficiaryGroups),
+    lowBenefitGroups: normalizePolicyGroupItems(sanitizedDraft.lowBenefitGroups),
+    shortTermEffects: sanitizedDraft.shortTermEffects || {},
+    longTermEffects: sanitizedDraft.longTermEffects || {},
+    risks: sanitizedDraft.risks || [],
     covers: [
-      selectedIssue()?.title || draft.primaryIssueId,
-      ...(draft.secondaryIssueIds || [])
+      selectedIssue()?.title || sanitizedDraft.primaryIssueId,
+      ...(sanitizedDraft.secondaryIssueIds || [])
         .map((issueId) => appData.issues.find((issue) => issue.id === issueId)?.title || issueId)
         .slice(0, 2),
     ],
-    effects: Object.entries(draft.shortTermEffects).map(([label, value]) => ({
+    effects: Object.entries(sanitizedDraft.shortTermEffects || {}).map(([label, value]) => ({
       label,
       value,
       tone: value >= 0 ? "good" : "warn",
@@ -1543,12 +1615,12 @@ function applyPolicyDraft(draft, options = {}) {
       messages: [
         {
           role: "assistant",
-          text: `${isNationalScenario() ? "政策案" : "施策案"}「${draft.title}」を作成しました。実施内容、効果、懸念点、属性別の影響を見ながら修正できます。`,
+          text: `${isNationalScenario() ? "政策案" : "施策案"}「${sanitizedDraft.title}」を作成しました。実施内容、効果、懸念点、属性別の影響を見ながら修正できます。`,
         },
       ],
     };
   } else {
-    chat.messages.push({ role: "assistant", text: `${isNationalScenario() ? "政策案" : "施策案"}を「${draft.title}」として更新しました。` });
+    chat.messages.push({ role: "assistant", text: `${isNationalScenario() ? "政策案" : "施策案"}を「${sanitizedDraft.title}」として更新しました。` });
   }
   const memoryBefore = getMemory(appData);
   const now = new Date().toISOString();
@@ -1562,8 +1634,8 @@ function applyPolicyDraft(draft, options = {}) {
         turnId,
         type: "policy_draft_updated",
         createdAt: now,
-        summary: draft.title,
-        payload: { draft },
+        summary: sanitizedDraft.title,
+        payload: { draft: sanitizedDraft },
       },
     ],
   };
@@ -2708,28 +2780,28 @@ function buildFreePolicyTarget(text, scale = activeFreePolicyScale) {
     title,
     sourceText: trimmedText,
     fit: scale === "large" ? 61 : scale === "small" ? 68 : 64,
-    metrics: ["AIが関連指標を推論", "AIが効果軸を推論", "AIが利害関係者を推論"],
-    summary: `${trimmedText}。自由記述から作成した${scaleLabel}規模の政策ターゲットです。既知分野へ固定せず、AI生成時に分野・関連指標・国民やステークホルダー反応を推論します。`,
+    metrics: ["関連指標の確認", "効果軸の確認", "利害関係者の確認"],
+    summary: `${trimmedText}。${scaleLabel}規模の政策ターゲットとして、分野、関連指標、国民やステークホルダー反応を確認します。`,
     field: domainGuidance.label,
     relatedMetricIds: [],
     recommendedViews: ["clusters"],
-    fundingNote: "自由記述政策はAI接続時のみ生成します。固定サンプルでは声の分析や政策案生成は行いません。",
+    fundingNote: "個別政策のため、生成前に財源規模、対象範囲、実装主体を確認します。",
     designIssues: [
       {
         id: "scope",
-        title: "AIによる争点推論",
-        axisA: "政策本文から自由に論点化する",
-        axisB: "既存プリセットの分野へ寄せない",
-        description: "未分類政策では、対象範囲や反発層を固定テンプレートで決めず、AI生成時に政策本文から推論します。",
-        watchPoints: ["政策分野", "直接影響を受ける主体", "制度設計上の争点"],
+        title: "対象範囲と優先順位",
+        axisA: "対象を狭く定義して効果を集中する",
+        axisB: "対象を広く定義して波及を重視する",
+        description: "対象範囲の取り方によって、便益を受ける層、反発する層、必要財源が変わります。",
+        watchPoints: ["政策分野", "直接影響を受ける主体", "必要財源"],
       },
       {
         id: "validation",
-        title: "推論結果の確認",
-        axisA: "AIが選んだ関連指標を採用する",
-        axisB: "チャットで関連指標・効果軸を修正する",
-        description: "AIの初回推論後、ユーザーがチャットで分野、関連指標、対象層を調整できるようにします。",
-        watchPoints: ["関連指標", "推奨ビュー", "声の偏り"],
+        title: "分析軸の確認",
+        axisA: "経済・財政効果を重視する",
+        axisB: "公平性・実装負荷を重視する",
+        description: "政策の見方によって、優先して確認すべき指標や効果軸が変わります。",
+        watchPoints: ["関連指標", "対象層", "反発しやすい論点"],
       },
     ],
   };
@@ -3727,12 +3799,22 @@ function nationalVoiceRules() {
   ];
 }
 
+function userFacingOutputRules() {
+  return [
+    "画面に表示される文章には、内部処理やプロンプトの都合を説明するメタ文を入れない",
+    "policyTarget、context、designIssues、JSON Schema、プロンプト、テンプレート、既存プリセット、AI生成、AIが推論、自己レビューなどの内部語を出力本文に含めない",
+    "自由記述政策であっても、実施内容・効果・懸念には政策そのものの説明だけを書く",
+    "内部の分析方針をそのまま写さず、政策対象、実施主体、対象者、財源、制度条件、影響として読める文章に言い換える",
+  ];
+}
+
 async function generateNationalVoicesWithAi(policyTarget) {
   const prompt = JSON.stringify(
     {
       task: "国版政策シミュレーターの第一段階として、政策ターゲットに対する国民・ステークホルダーの代表的な声だけを生成してください。",
       context: nationalGenerationContext(policyTarget),
       requirements: nationalVoiceRules(),
+      outputHygiene: userFacingOutputRules(),
       outputNotes: [
         "この段階ではvoiceAnalysisやpolicyDraftは作らない",
         "policyTarget.designIssuesがある場合は、各争点の対立軸に対する賛否・条件・懸念が分かれるように声を作る",
@@ -3758,6 +3840,7 @@ async function generateNationalVoiceAnalysisWithAi(policyTarget, voices) {
       context: nationalGenerationContext(policyTarget),
       voices,
       requirements: [
+        ...userFacingOutputRules(),
         "新しい声を捏造せず、representativeVoiceIdsは入力voicesのidだけを参照する",
         "voiceAnalysis.clustersは4から6件",
         "populationSizeは代表発話数ではなく、政策影響を受ける推定母集団とする。国全体に関わる政策では125000000程度を使う",
@@ -3789,6 +3872,7 @@ async function generateNationalInitialPolicyWithAi(policyTarget, voices, voiceAn
       voices,
       voiceAnalysis,
       requirements: [
+        ...userFacingOutputRules(),
         "policyDraft.primaryIssueIdはpolicyTarget.idにする",
         "policyDraftは短期実行を前提にする",
         "負担増政策では、支持を広げるための補償策・時限措置・使途限定・低所得層還付などを実施内容に必ず含める",
