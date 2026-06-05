@@ -3,6 +3,22 @@ import http from "node:http";
 const bridgePort = Number(process.env.CODEX_AI_BRIDGE_PORT || 45124);
 const codexUrl = process.env.CODEX_APP_SERVER_URL || "ws://127.0.0.1:45123";
 const codexRequestTimeoutMs = Number(process.env.CODEX_AI_BRIDGE_TIMEOUT_MS || 900000);
+const defaultAllowedOrigins = [
+  "http://127.0.0.1:4173",
+  "http://localhost:4173",
+  "http://[::1]:4173",
+  "http://127.0.0.1:5173",
+  "http://localhost:5173",
+  "http://[::1]:5173",
+  "https://saotomryo.github.io",
+];
+const allowedOrigins = new Set([
+  ...defaultAllowedOrigins,
+  ...(process.env.CODEX_AI_BRIDGE_ALLOWED_ORIGINS || "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean),
+]);
 
 function codexHttpUrl(pathname) {
   const url = new URL(codexUrl);
@@ -25,11 +41,28 @@ async function codexReadyStatus() {
   }
 }
 
-function sendJson(response, status, body) {
+function corsOrigin(request) {
+  const origin = request.headers.origin;
+  if (!origin) return "http://127.0.0.1:4173";
+  if (allowedOrigins.has(origin)) return origin;
+  try {
+    const url = new URL(origin);
+    if ((url.hostname === "127.0.0.1" || url.hostname === "localhost" || url.hostname === "::1") && ["http:", "https:"].includes(url.protocol)) {
+      return origin;
+    }
+  } catch {
+    return "null";
+  }
+  return "null";
+}
+
+function sendJson(request, response, status, body) {
   response.writeHead(status, {
-    "Access-Control-Allow-Origin": "http://127.0.0.1:4173",
+    "Access-Control-Allow-Origin": corsOrigin(request),
     "Access-Control-Allow-Methods": "POST, OPTIONS, GET",
     "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Private-Network": "true",
+    "Vary": "Origin",
     "Content-Type": "application/json; charset=utf-8",
   });
   response.end(JSON.stringify(body));
@@ -217,23 +250,23 @@ function codexRequest({ schemaName, prompt, schema, model }) {
 
 const server = http.createServer(async (request, response) => {
   if (request.method === "OPTIONS") {
-    sendJson(response, 204, {});
+    sendJson(request, response, 204, {});
     return;
   }
   if (request.method === "GET" && request.url === "/healthz") {
-    sendJson(response, 200, { ok: true, codexUrl, ...(await codexReadyStatus()) });
+    sendJson(request, response, 200, { ok: true, codexUrl, ...(await codexReadyStatus()) });
     return;
   }
   if (request.method !== "POST" || request.url !== "/codex-json") {
-    sendJson(response, 404, { error: "not_found" });
+    sendJson(request, response, 404, { error: "not_found" });
     return;
   }
   try {
     const payload = JSON.parse(await readBody(request));
     const result = await codexRequest(payload);
-    sendJson(response, 200, { result });
+    sendJson(request, response, 200, { result });
   } catch (error) {
-    sendJson(response, 500, { error: error.message });
+    sendJson(request, response, 500, { error: error.message });
   }
 });
 

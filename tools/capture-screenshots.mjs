@@ -13,6 +13,9 @@ const page = await browser.newPage({
 });
 
 page.setDefaultTimeout(25000);
+await page.addInitScript(() => {
+  localStorage.setItem("national-policy-display-mode", "detail");
+});
 
 async function saveScreenshot(name) {
   await page.waitForTimeout(800);
@@ -30,6 +33,8 @@ await page.waitForFunction(() => !document.querySelector("#generate-target-analy
 await saveScreenshot("policy-target.png");
 
 await page.click("#generate-target-analysis");
+await page.waitForFunction(() => document.querySelector(".generation-notice")?.textContent?.includes("完了"));
+await page.click('a[data-view="voices"]');
 await page.waitForFunction(() => document.querySelector(".app-shell")?.className.includes("view-voices"));
 await saveScreenshot("voices.png");
 
