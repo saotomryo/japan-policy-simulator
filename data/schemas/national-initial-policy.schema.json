@@ -77,7 +77,9 @@
           "properties": {
             "support": { "type": "number" },
             "happiness": { "type": "number" },
+            "academic": { "type": "number" },
             "fairness": { "type": "number" },
+            "rule": { "type": "number" },
             "participation": { "type": "number" },
             "externalReputation": { "type": "number" },
             "fiscalCapacity": { "type": "number" },

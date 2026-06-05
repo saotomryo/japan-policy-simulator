@@ -102,15 +102,15 @@
       "title": "食料品のみ消費税を0%",
       "fit": 88,
       "metrics": ["税負担感", "家計可処分所得", "財政余力", "社会保障持続性", "経済波及効果", "業界別影響", "実装リスク"],
-      "summary": "酒類・外食を除く食料品の消費税率を時限的に0%へ下げ、生活必需品の負担感を軽減する仮想政策。価格転嫁、区分経理、税収減、低所得層への実効性を同時に検討する。",
+      "summary": "酒類・外食を除く食料品の消費税率を時限的に0%へ下げ、生活必需品の負担感を軽減する仮想政策。価格転嫁、インフレ相殺、区分経理、税収減、低所得層への実効性を同時に検討する。",
       "field": "税制・家計支援",
       "relatedMetricIds": ["rule", "academic", "fiscalCapacity", "socialSecurity", "support", "economicRipple", "implementationRisk", "importIndustryImpact", "exportIndustryImpact", "manufacturingImpact", "agricultureImpact", "financeIndustryImpact"],
       "recommendedViews": ["income", "generation", "industry", "fiscal", "implementation", "clusters"],
       "fundingNote": "税収減と社会保障財源への補填策、時限措置終了時の出口戦略が必要。",
       "designIssues": [
-        { "id": "scope", "title": "対象範囲", "axisA": "生活必需品を広く対象", "axisB": "対象を絞って財源減を抑制", "description": "生鮮・加工食品・テイクアウト・学校給食など、どこまで0%に含めるかで便益と事務負担が変わる。対象が広いほど家計効果は出るが、税収減と線引きコストも増える。", "watchPoints": ["外食・酒類との線引き", "小売・飲食事業者の区分経理", "価格転嫁されるか", "低所得層への実効性"] },
-        { "id": "duration", "title": "時限措置か恒久措置か", "axisA": "短期の物価対策", "axisB": "恒久的な生活支援", "description": "時限措置は財源負担を抑えやすい一方、終了時の反動や再引上げの政治コストが残る。", "watchPoints": ["終了条件", "再増税時の反発", "財政規律への説明"] },
-        { "id": "redistribution", "title": "広く減税か targeted 支援か", "axisA": "全世帯にわかりやすい減税", "axisB": "低所得層へ重点支援", "description": "食料品減税は幅広く届くが、高所得層にも便益が出るため、給付・還付との組み合わせが争点になる。", "watchPoints": ["所得別効果", "家計支援の実感", "給付付き税額控除との比較"] },
+        { "id": "scope", "title": "対象範囲", "axisA": "生活必需品を広く対象", "axisB": "対象を絞って財源減を抑制", "description": "生鮮・加工食品・テイクアウト・学校給食など、どこまで0%に含めるかで便益と事務負担が変わる。対象が広いほど家計効果は出るが、税収減、線引きコスト、価格転嫁の不確実性も増える。", "watchPoints": ["外食・酒類との線引き", "小売・飲食事業者の区分経理", "価格転嫁されるか", "インフレ相殺", "低所得層への実効性"] },
+        { "id": "duration", "title": "時限措置か恒久措置か", "axisA": "短期の物価対策", "axisB": "恒久的な生活支援", "description": "時限措置は財源負担を抑えやすい一方、終了時の値戻し、駆け込み需要、再引上げの政治コストが残る。", "watchPoints": ["終了条件", "終了時の価格反動", "再増税時の反発", "財政規律への説明"] },
+        { "id": "redistribution", "title": "広く減税か重点支援か", "axisA": "全世帯にわかりやすい減税", "axisB": "低所得層へ重点支援", "description": "食料品減税は幅広く届くが、高所得層にも便益が出るため、給付・還付との組み合わせが争点になる。", "watchPoints": ["所得別効果", "家計支援の実感", "給付付き税額控除との比較"] },
         { "id": "operation", "title": "制度運用の単純さ", "axisA": "0%でわかりやすく実施", "axisB": "品目別・期間別に細かく制御", "description": "単純な制度は理解されやすいが財源影響が大きく、細かい制度は財源を抑えられるが実装リスクと不公平感が増える。", "watchPoints": ["レジ改修", "請求書・インボイス対応", "監査・不正防止"] }
       ]
     },
@@ -210,7 +210,7 @@
       "name": "都市部の30代子育て世帯",
       "group": "中間層",
       "mood": "賛成",
-      "text": "食品や日用品の負担が下がるなら実感は大きい。時限措置でもいいので早く効いてほしい。",
+      "text": "食品の負担が下がるなら実感は大きい。ただ、店頭価格が本当に下がるのか、終了時に一気に値上がりしないのかも気になる。",
       "avatar": { "slot": "sky", "label": "子" }
     },
     {
@@ -218,7 +218,7 @@
       "name": "財政規律を重視する専門家",
       "group": "財政規律重視層",
       "mood": "反対",
-      "text": "短期の支持は得やすいが、社会保障財源の穴埋めを同時に示さないと長期の信頼を失う。",
+      "text": "短期の支持は得やすいが、社会保障財源の穴埋めと終了時の反動対策を同時に示さないと、財政規律と制度信頼を損なう。",
       "avatar": { "slot": "rose", "label": "財" }
     },
     {
@@ -243,7 +243,7 @@
         "x": 72,
         "y": 72,
         "keywords": ["物価", "家計", "消費", "減税"],
-        "summary": "物価負担への即効性を評価するが、恒久化や財源には慎重。",
+        "summary": "物価負担への即効性を評価するが、価格転嫁、終了時反動、恒久化や財源には慎重。",
         "representativeVoiceIds": ["voice_parent_urban", "voice_elder_local"]
       },
       {
@@ -253,8 +253,8 @@
         "sentiment": -0.58,
         "x": 142,
         "y": 128,
-        "keywords": ["財源", "社会保障", "将来世代", "恒久化"],
-        "summary": "短期効果よりも財源補填と制度持続性を重視する声。",
+        "keywords": ["財源", "社会保障", "将来世代", "恒久化", "出口戦略"],
+        "summary": "短期効果よりも財源補填、制度持続性、終了時の価格反動を重視する声。",
         "representativeVoiceIds": ["voice_fiscal_expert"]
       },
       {
@@ -330,15 +330,15 @@
       { "segmentId": "age_65_plus", "segmentLabel": "65歳以上", "axis": "generation", "applicability": "applicable", "effectScore": 8, "benefitLevel": "medium", "riskLevel": "medium", "summary": "物価負担は下がるが、医療・介護財源への懸念が強い。", "reason": "社会保障財源への依存度が高いため" }
     ],
     "income": [
-      { "segmentId": "income_low", "segmentLabel": "低所得層", "axis": "income", "applicability": "applicable", "effectScore": 15, "benefitLevel": "high", "riskLevel": "low", "summary": "消費税負担の比率が高く、短期便益が大きい。", "reason": "消費支出が所得に占める割合が高いため" },
-      { "segmentId": "income_middle", "segmentLabel": "中間層", "axis": "income", "applicability": "applicable", "effectScore": 11, "benefitLevel": "medium", "riskLevel": "low", "summary": "広い層に便益が出るが、財源説明への関心も高い。", "reason": "支出規模と税負担感の双方が大きいため" },
+      { "segmentId": "income_low", "segmentLabel": "低所得層", "axis": "income", "applicability": "applicable", "effectScore": 13, "benefitLevel": "high", "riskLevel": "medium", "summary": "消費税負担の比率が高く短期便益は大きいが、価格転嫁が弱い場合や食料品価格が上がる場合は効果が相殺される。", "reason": "消費支出が所得に占める割合が高く、賃金上昇の遅れも受けやすいため" },
+      { "segmentId": "income_middle", "segmentLabel": "中間層", "axis": "income", "applicability": "applicable", "effectScore": 9, "benefitLevel": "medium", "riskLevel": "medium", "summary": "広い層に便益が出るが、財源説明と終了時の値戻しへの関心も高い。", "reason": "支出規模と税負担感の双方が大きく、時限措置の反動を意識しやすいため" },
       { "segmentId": "income_high", "segmentLabel": "高所得層", "axis": "income", "applicability": "applicable", "effectScore": 5, "benefitLevel": "low", "riskLevel": "low", "summary": "金額上の便益はあるが、相対的な生活改善効果は小さい。", "reason": "所得に占める消費税負担の比率が比較的小さいため" }
     ],
     "industry": [
-      { "segmentId": "industry_import", "segmentLabel": "輸入業", "axis": "industry", "applicability": "applicable", "effectScore": 4, "benefitLevel": "medium", "riskLevel": "medium", "summary": "輸入消費財の需要増が見込める一方、為替や物流コストの影響を受けやすい。", "reason": "消費税減税で最終需要は押し上げられるが、円安時は仕入れコストが残るため" },
+      { "segmentId": "industry_import", "segmentLabel": "輸入業", "axis": "industry", "applicability": "applicable", "effectScore": 3, "benefitLevel": "medium", "riskLevel": "medium", "summary": "輸入食品の需要増は見込める一方、円安・物流費・原材料高があると減税分が価格低下に出にくい。", "reason": "消費税減税で最終需要は押し上げられるが、仕入れコスト上昇が相殺要因になるため" },
       { "segmentId": "industry_export", "segmentLabel": "輸出業", "axis": "industry", "applicability": "applicable", "effectScore": 1, "benefitLevel": "low", "riskLevel": "low", "summary": "国内消費刺激の直接効果は限定的だが、国内景況感の改善は投資心理を下支えする。", "reason": "主な売上要因が外需と為替であり、消費税減税との連動が弱いため" },
       { "segmentId": "industry_manufacturing", "segmentLabel": "製造業", "axis": "industry", "applicability": "applicable", "effectScore": 3, "benefitLevel": "medium", "riskLevel": "medium", "summary": "耐久財・生活関連製品には需要押し上げが出るが、原材料費と設備投資判断は別要因に左右される。", "reason": "国内需要の改善とコスト制約が同時に作用するため" },
-      { "segmentId": "industry_agriculture", "segmentLabel": "農業", "axis": "industry", "applicability": "applicable", "effectScore": 2, "benefitLevel": "low", "riskLevel": "medium", "summary": "食品需要は底堅くなるが、燃料・肥料・流通コストへの直接対策ではない。", "reason": "需要面の効果に比べ、生産コスト軽減の効果が限定的なため" },
+      { "segmentId": "industry_agriculture", "segmentLabel": "農業", "axis": "industry", "applicability": "applicable", "effectScore": 1, "benefitLevel": "low", "riskLevel": "medium", "summary": "食品需要は底堅くなるが、燃料・肥料・流通コストへの直接対策ではなく、価格低下圧力が生産者に寄る可能性もある。", "reason": "需要面の効果に比べ、生産コスト軽減の効果が限定的なため" },
       { "segmentId": "industry_finance", "segmentLabel": "金融", "axis": "industry", "applicability": "applicable", "effectScore": -2, "benefitLevel": "low", "riskLevel": "medium", "summary": "消費者信用にはプラスだが、財源不安が強まると金利・国債市場への警戒が残る。", "reason": "短期需要改善と財政リスク評価が逆方向に働くため" }
     ],
     "fiscal": [
@@ -371,7 +371,7 @@
   "policy": {
     "id": "temporary_consumption_tax_cut",
     "title": "時限的な消費税減税と低所得世帯補完策",
-    "summary": "1年間の消費税率引き下げを行い、社会保障財源への補填と低所得世帯への追加支援を組み合わせる。",
+    "summary": "1年間の食料品消費税率引き下げを行い、価格転嫁の確認、社会保障財源への補填、低所得世帯への追加支援を組み合わせる。",
     "budget": 98000,
     "cashUse": 42000,
     "financePlan": "国債増発と一部歳出見直しを組み合わせる。恒久化は行わない。",
@@ -424,19 +424,21 @@
     ],
     "covers": ["消費税減税", "低所得層の物価負担軽減", "社会保障財源への補填"],
     "implementationDetails": [
-      "1年間の時限措置として消費税率を引き下げる。",
+      "1年間の時限措置として酒類・外食を除く食料品の消費税率を0%にする。",
       "低所得世帯には追加給付を組み合わせ、逆進性対策を補強する。",
-      "社会保障財源への補填策を同時に示し、恒久化しない条件を明確化する。"
+      "主要小売価格の転嫁状況を月次で確認し、減税分が価格に反映されない場合の説明と監視を行う。",
+      "社会保障財源への補填策と終了条件を同時に示し、恒久化しない条件を明確化する。"
     ],
     "expectedEffects": [
-      "物価負担感を短期的に下げる。",
-      "低所得層と中間層の可処分所得を改善する。",
-      "小売・サービス消費の下支えを狙う。"
+      "価格転嫁が進む品目では物価負担感を短期的に下げる。",
+      "低所得層と中間層の可処分所得を改善するが、食料品価格の上昇が続く場合は効果が一部相殺される。",
+      "食品小売の需要下支えを狙う一方、終了時には値戻しへの不満が出やすい。"
     ],
     "concerns": [
       "財源補填が弱いと社会保障持続性への不安が強まる。",
-      "時限措置が恒久化圧力につながる可能性がある。",
-      "高所得層にも便益が及ぶため、政策対象の説明が必要。"
+      "価格転嫁が弱い場合、減税分が家計ではなく流通・小売側の余力として吸収される可能性がある。",
+      "時限措置が恒久化圧力や終了時の駆け込み・値戻し反発につながる可能性がある。",
+      "高所得層にも便益が及ぶため、低所得層への重点支援との比較説明が必要。"
     ],
     "beneficiaryGroups": [
       { "groupId": "low_income", "label": "低所得層", "reason": "消費税負担の比率が高く、負担軽減の実感が大きい。" },

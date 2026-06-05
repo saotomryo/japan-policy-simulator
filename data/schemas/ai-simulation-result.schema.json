@@ -60,6 +60,7 @@
         "required": ["groupId", "summary", "scoreDelta"],
         "properties": {
           "groupId": { "type": "string" },
+          "label": { "type": "string" },
           "summary": { "type": "string" },
           "scoreDelta": { "type": "number" }
         },
