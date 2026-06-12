@@ -1525,6 +1525,34 @@ button:disabled {
   border-radius: 6px;
 }
 
+.voice-hierarchy li > div.selectable {
+  border-left-color: rgba(15, 76, 80, 0.52);
+  background: #f3fafa;
+}
+
+.voice-hierarchy li > div.selected {
+  border-color: rgba(15, 76, 80, 0.34);
+  background: #eef8f8;
+  box-shadow: 0 10px 22px rgba(15, 35, 42, 0.08);
+}
+
+.voice-hierarchy button {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  min-height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.voice-hierarchy button:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
 .voice-hierarchy strong {
   font-size: 12px;
 }
@@ -1534,6 +1562,32 @@ button:disabled {
   font-size: 11px;
   font-weight: 800;
   line-height: 1.45;
+}
+
+.hierarchy-voice-popover {
+  display: grid;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 10px 12px;
+  border: 1px solid rgba(15, 76, 80, 0.18);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.hierarchy-voice-popover div {
+  display: grid;
+  gap: 2px;
+}
+
+.hierarchy-voice-popover div span {
+  color: var(--accent);
+  font-size: 10px;
+}
+
+.hierarchy-voice-popover p {
+  color: #334144;
+  font-size: 12px;
+  line-height: 1.65;
 }
 
 .issue-map {

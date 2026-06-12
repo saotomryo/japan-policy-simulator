@@ -15,6 +15,7 @@ let activeResultEffectAxis = "related";
 let activePolicyPanel = "cost";
 let activeFreePolicyScale = "standard";
 let activeDisplayMode = localStorage.getItem("national-policy-display-mode") || "detail";
+let activeHierarchyVoiceKey = "";
 let freePolicyDraftText = "";
 let freePolicyTitleText = "";
 let freePolicySummaryText = "";
@@ -3634,6 +3635,152 @@ function normalizeNationalGeneratedState() {
   }
 }
 
+function sampleHierarchyDetailLabels(clusterId, label = "") {
+  const details = {
+    household_relief: ["日用品・食品支出の軽減実感", "時限措置終了後の反動不安"],
+    conditional_support: ["低所得世帯への補完条件", "財源と出口戦略の確認"],
+    fiscal_warning: ["恒久財源への懸念", "社会保障財源との優先順位"],
+    indifferent_cluster: ["制度内容の理解不足", "生活実感が出るまで静観"],
+    international_limited: ["国際関係への影響は限定的", "海外からの財政規律評価を注視"],
+    deterrence_support: ["周辺国リスクへの備え", "目的限定と国会監視の要求"],
+    industrial_base_expectation: ["国内調達・技術基盤の維持", "輸出管理と民生転用の線引き"],
+    pacifist_ethics_opposition: ["軍拡競争への反発", "平和主義・倫理面の警戒"],
+    fiscal_procurement_warning: ["防衛費増の財源懸念", "調達透明性・中抜き監視"],
+    local_safety_concern: ["基地・実証地域の負担", "事故時の自治体説明責任"],
+    low_attention_security: ["安全保障情報への距離感", "生活影響が見えるまで低関心"],
+    household_opposition: ["低所得・子育て世帯の負担増", "物価高との重なりへの反発"],
+    fixed_income_anxiety: ["年金生活者の固定収入不安", "医療・介護周辺支出の圧迫"],
+    fiscal_conditional_support: ["使途限定なら一定支持", "還付・補償策が支持条件"],
+    business_consumption_concern: ["消費冷え込みへの警戒", "価格表示・レジ対応の負担"],
+    resigned_low_attention: ["政治不信による諦め", "使途説明が届かない層"],
+    parent_relief_expectation: ["教育費・食費への直接支援", "住宅費や継続性への不安"],
+    service_supply_warning: ["保育士不足・受け皿不足", "現金給付だけでは効果限定"],
+    fairness_non_parent: ["対象外世帯の公平感", "将来世代全体への説明要求"],
+    fiscal_complexity_warning: ["所得制限・多子加算の複雑化", "恒久給付の財源負担"],
+    admin_delivery_risk: ["申請・所得確認の事務負荷", "誤給付・受給漏れリスク"],
+    digital_convenience: ["待ち時間短縮への期待", "夜間・オンライン対応の利便性"],
+    frontline_review_load: ["例外対応が職員に残る懸念", "苦情・最終責任の所在"],
+    digital_exclusion: ["高齢者・非デジタル層の不安", "電話・対面窓口維持の要求"],
+    privacy_accountability: ["相談履歴・個人情報の扱い", "誤回答時の説明責任"],
+    vendor_ops_expectation: ["ログ監査・モデル更新需要", "職員研修・運用保守の継続投資"],
+    low_attention_dx: ["使う場面が見えるまで低関心", "具体的な案内画面待ち"],
+    rural_mobility_expectation: ["通院・買い物の足への期待", "悪天候・道路条件への不安"],
+    safety_liability_warning: ["事故責任・保険の不明確さ", "停止基準・ログ開示の要求"],
+    job_transition_concern: ["運転職の雇用転換不安", "既存交通事業との調整"],
+    industry_competitiveness: ["物流効率化・人手不足対応", "センサー・地図・通信産業への波及"],
+    digital_access_auto: ["配車アプリ前提への不安", "電話予約・地域窓口の必要性"],
+    benefit_expectation: ["短期的な生活改善期待", "対象条件の分かりやすさ"],
+    implementation_cost: ["現場実務・制度変更コスト", "業界別の準備期間"],
+    low_attention: ["広報不足による低理解", "実感が出るまで態度保留"],
+  };
+  return details[clusterId] || [`${label}の直接影響`, `${label}の制度条件`];
+}
+
+function sampleHierarchyVoiceSample(clusterId, detailLabel, clusterLabel = "") {
+  const personas = {
+    household_relief: "食費負担を気にする子育て世帯",
+    conditional_support: "制度条件を確認したい中間層",
+    fiscal_warning: "財源規律を重視する有権者",
+    indifferent_cluster: "政治への関心が低い生活者",
+    international_limited: "国際評価も気にする専門職",
+    deterrence_support: "安全保障を重視する保守層",
+    industrial_base_expectation: "防衛産業に関わる製造業関係者",
+    pacifist_ethics_opposition: "平和主義を重視するリベラル層",
+    fiscal_procurement_warning: "調達透明性を重視する納税者",
+    local_safety_concern: "基地・実証地域の住民",
+    low_attention_security: "安全保障への関心が薄い若年層",
+    household_opposition: "生活費上昇を警戒する低所得世帯",
+    fixed_income_anxiety: "年金生活者",
+    fiscal_conditional_support: "財政再建を重視する層",
+    business_consumption_concern: "小売・飲食事業者",
+    resigned_low_attention: "政治不信が強い無関心層",
+    parent_relief_expectation: "子育て中の共働き世帯",
+    service_supply_warning: "保育・教育現場の関係者",
+    fairness_non_parent: "対象外感を持つ若年単身層",
+    fiscal_complexity_warning: "社会保障財源を気にする専門家",
+    admin_delivery_risk: "自治体の給付実務担当者",
+    digital_convenience: "オンライン手続きに慣れた現役世代",
+    frontline_review_load: "自治体窓口の職員",
+    digital_exclusion: "対面窓口を必要とする高齢者",
+    privacy_accountability: "個人情報保護を重視する市民",
+    vendor_ops_expectation: "行政システム事業者",
+    low_attention_dx: "行政AIをまだ使う実感がない層",
+    rural_mobility_expectation: "地方の高齢者",
+    safety_liability_warning: "安全責任を気にする保護者",
+    job_transition_concern: "運転職に近い労働者",
+    industry_competitiveness: "物流・自動車関連事業者",
+    digital_access_auto: "スマホ利用に不安がある地域住民",
+    benefit_expectation: "短期的な生活改善を期待する層",
+    implementation_cost: "制度運用を担う現場担当者",
+    low_attention: "制度内容をまだ把握していない層",
+  };
+  return {
+    persona: personas[clusterId] || `${clusterLabel || "この論点"}に関心がある層`,
+    text: `「${detailLabel}」が一番気になります。政策の方向性には関心がありますが、実際に自分たちへどう影響するのか、条件と対応策を具体的に示してほしいです。`,
+  };
+}
+
+function deepenSampleHierarchyNode(node) {
+  if (!node || typeof node !== "object") return node;
+  const children = (node.children || []).map(deepenSampleHierarchyNode);
+  if (node.clusterId && !children.length) {
+    const labels = sampleHierarchyDetailLabels(node.clusterId, node.label);
+    const total = Number(node.size || 0);
+    const firstSize = Math.max(1, Math.round(total * 0.6));
+    return {
+      ...node,
+      children: labels.map((label, index) => ({
+        label,
+        size: index === labels.length - 1 ? Math.max(1, total - firstSize) : firstSize,
+        voiceSample: sampleHierarchyVoiceSample(node.clusterId, label, node.label),
+        children: [],
+      })),
+    };
+  }
+  return { ...node, children };
+}
+
+function collectHierarchyClusterIds(node, ids = new Set()) {
+  if (!node) return ids;
+  if (node.clusterId) ids.add(node.clusterId);
+  (node.children || []).forEach((child) => collectHierarchyClusterIds(child, ids));
+  return ids;
+}
+
+function ensureSampleHierarchyCoversClusters(analysis) {
+  if (!analysis?.hierarchy || !analysis?.clusters?.length) return analysis;
+  const includedIds = collectHierarchyClusterIds(analysis.hierarchy);
+  const missingClusters = analysis.clusters.filter((cluster) => !includedIds.has(cluster.id));
+  if (!missingClusters.length) return analysis;
+  return {
+    ...analysis,
+    hierarchy: {
+      ...analysis.hierarchy,
+      children: [
+        ...(analysis.hierarchy.children || []),
+        {
+          label: "その他の反応",
+          size: missingClusters.reduce((sum, cluster) => sum + Number(cluster.size || 0), 0),
+          children: missingClusters.map((cluster) => ({
+            label: cluster.label,
+            clusterId: cluster.id,
+            size: cluster.size,
+          })),
+        },
+      ],
+    },
+  };
+}
+
+function deepenSampleVoiceAnalysisHierarchy(analysis) {
+  if (!analysis?.hierarchy) return analysis;
+  const coveredAnalysis = ensureSampleHierarchyCoversClusters(analysis);
+  return {
+    ...coveredAnalysis,
+    hierarchy: deepenSampleHierarchyNode(coveredAnalysis.hierarchy),
+  };
+}
+
 function sampleNationalVoiceAnalysis(policyTarget, voices) {
   const title = policyTarget?.title || "対象政策";
   if (inferPolicyDomain(policyTarget) === "defense_security") {
@@ -5022,7 +5169,7 @@ function applyPreparedTargetMock(policyTarget) {
   if (!prepared) return false;
   appData.nationalGenerationCheckpoint = null;
   appData.voices = deepClone(prepared.voices || []);
-  appData.voiceAnalysis = normalizeNationalVoiceAnalysis(deepClone(prepared.voiceAnalysis || null), appData.voices);
+  appData.voiceAnalysis = deepenSampleVoiceAnalysisHierarchy(normalizeNationalVoiceAnalysis(deepClone(prepared.voiceAnalysis || null), appData.voices));
   appData.segmentEffects = deepClone(prepared.segmentEffects || {});
   applyPolicyDraft(deepClone(prepared.policy || emptyPolicyDraft()), { resetChat: true });
   if (prepared.policyChat?.messages?.length) {
@@ -5061,7 +5208,7 @@ async function generatePolicyTargetInitialData() {
       throw new Error("自由記述政策は固定サンプルを使わず、AI接続で生成してください。");
     }
     appData.voices = sampleNationalVoices(policyTarget);
-    appData.voiceAnalysis = normalizeNationalVoiceAnalysis(sampleNationalVoiceAnalysis(policyTarget, appData.voices), appData.voices);
+    appData.voiceAnalysis = deepenSampleVoiceAnalysisHierarchy(normalizeNationalVoiceAnalysis(sampleNationalVoiceAnalysis(policyTarget, appData.voices), appData.voices));
     appData.segmentEffects = sampleNationalSegmentEffects(policyTarget);
     applyPolicyDraft(sampleNationalPolicyDraft(policyTarget), { resetChat: true });
   }
@@ -6117,15 +6264,50 @@ function VoiceClusterMap() {
   `;
 }
 
-function HierarchyNode(node, depth = 0) {
+function hierarchyVoiceKey(path = []) {
+  return path.map((item) => encodeURIComponent(String(item))).join("/");
+}
+
+function findHierarchyNodeByKey(node, key, path = []) {
+  if (!node) return null;
+  const currentPath = [...path, node.label];
+  if (hierarchyVoiceKey(currentPath) === key) return node;
+  for (const child of node.children || []) {
+    const found = findHierarchyNodeByKey(child, key, currentPath);
+    if (found) return found;
+  }
+  return null;
+}
+
+function HierarchyVoicePopover(node, cluster) {
+  if (!node?.voiceSample) return "";
+  return `
+    <aside class="hierarchy-voice-popover" role="status">
+      <div>
+        <span>${escapeHtml(cluster?.label || "サブ論点")}</span>
+        <strong>${escapeHtml(node.voiceSample.persona)}</strong>
+      </div>
+      <p>${escapeHtml(node.voiceSample.text)}</p>
+    </aside>
+  `;
+}
+
+function HierarchyNode(node, depth = 0, path = []) {
   const cluster = node.clusterId ? appData.voiceAnalysis?.clusters?.find((item) => item.id === node.clusterId) : null;
+  const currentPath = [...path, node.label];
+  const key = hierarchyVoiceKey(currentPath);
+  const hasVoiceSample = Boolean(node.voiceSample);
+  const selected = activeHierarchyVoiceKey === key;
   return `
     <li style="--depth:${depth}">
-      <div>
-        <strong>${node.label}</strong>
-        <span>${node.size}件${cluster ? ` / ${cluster.keywords.join("・")}` : ""}</span>
+      <div class="${hasVoiceSample ? "selectable" : ""} ${selected ? "selected" : ""}">
+        <button type="button" ${hasVoiceSample ? `data-hierarchy-voice-key="${key}" aria-expanded="${selected}"` : "disabled aria-hidden=\"true\" tabindex=\"-1\""}>
+          <strong>${escapeHtml(node.label)}</strong>
+          <span>${node.size}件${cluster ? ` / ${escapeHtml(cluster.keywords.join("・"))}` : ""}${hasVoiceSample ? " / 発話を見る" : ""}</span>
+        </button>
+        ${selected ? HierarchyVoicePopover(node, cluster) : ""}
       </div>
-      ${node.children?.length ? `<ul>${node.children.map((child) => HierarchyNode(child, depth + 1)).join("")}</ul>` : ""}
+      ${node.children?.length ? `<ul>${node.children.map((child) => HierarchyNode(child, depth + 1, currentPath)).join("")}</ul>` : ""}
     </li>
   `;
 }
@@ -7272,6 +7454,7 @@ function hierarchyToEcharts(node) {
   return {
     name: `${node.label}\n${node.size}件`,
     value: node.size,
+    voiceSample: node.voiceSample || null,
     children: node.children?.map(hierarchyToEcharts) || [],
   };
 }
@@ -7288,7 +7471,15 @@ function renderVoiceChart() {
   const chart = window.echarts.init(chartElement, null, { renderer: "canvas" });
   if (activeVoiceChart === "hierarchy") {
     chart.setOption({
-      tooltip: { trigger: "item", triggerOn: "mousemove" },
+      tooltip: {
+        trigger: "item",
+        triggerOn: "mousemove",
+        formatter: (params) => {
+          const sample = params.data?.voiceSample;
+          if (!sample) return params.name.replace(/\n/g, "<br />");
+          return `<strong>${params.name.replace(/\n/g, "<br />")}</strong><br /><span>${escapeHtml(sample.persona)}</span><br />${escapeHtml(sample.text)}`;
+        },
+      },
       series: [
         {
           type: "tree",
@@ -7647,6 +7838,14 @@ function bindInteractions() {
   document.querySelectorAll("[data-voice-chart]").forEach((button) => {
     button.addEventListener("click", (event) => {
       activeVoiceChart = event.currentTarget.dataset.voiceChart;
+      activeHierarchyVoiceKey = "";
+      App(appData);
+    });
+  });
+  document.querySelectorAll("[data-hierarchy-voice-key]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      const key = event.currentTarget.dataset.hierarchyVoiceKey;
+      activeHierarchyVoiceKey = activeHierarchyVoiceKey === key ? "" : key;
       App(appData);
     });
   });
