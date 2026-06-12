@@ -49,6 +49,9 @@ national-policy-*.html
 school-simulator-*.json
 school-simulator-report-*.html
 
+# Local article/video production materials
+local-media/
+
 # Temporary local work files
 tmp/
 temp/
